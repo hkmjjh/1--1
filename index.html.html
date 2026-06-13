@@ -1,1 +1,2525 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>SOAP Catcher 2.0 - Clinical Practice Trainer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Noto+Sans+KR:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <!-- jsPDF Library for seamless PDF Multi-Page Assembly -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        body { 
+            font-family: 'Inter', 'Noto Sans KR', sans-serif; 
+            background: radial-gradient(circle at center, #0b1528 0%, #030712 100%);
+            overflow: hidden; 
+            user-select: none;
+            touch-action: none;
+        }
+        /* Glassmorphism Panels */
+        .glass-panel { 
+            background: rgba(10, 20, 42, 0.75); 
+            backdrop-filter: blur(25px); 
+            border: 1px solid rgba(6, 182, 212, 0.2); 
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+        /* Pulse for emergency state */
+        .emergency-active {
+            animation: emergency-flash 0.8s infinite alternate;
+        }
+        @keyframes emergency-flash {
+            0% { box-shadow: inset 0 0 10px rgba(239, 68, 68, 0.3); border-color: rgba(239, 68, 68, 0.4); }
+            100% { box-shadow: inset 0 0 40px rgba(239, 68, 68, 0.8); border-color: rgba(239, 68, 68, 1); }
+        }
+        /* Custom scrollbar for scroll screens */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        ::-webkit-scrollbar-thumb { background: rgba(6, 182, 212, 0.4); border-radius: 3px; }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col relative">
 
+    <div class="absolute inset-0 bg-[linear-gradient(to_right,rgba(6,182,212,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(6,182,212,0.05)_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none"></div>
+
+    <!-- HUD Header -->
+    <header id="hud" class="hidden fixed top-0 left-0 w-full glass-panel z-50 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2">
+                <span id="hudPing" class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+                <span class="text-[11px] font-mono tracking-widest text-cyan-400 uppercase">Stage <span id="hudStage">1</span></span>
+            </div>
+            <!-- Progress Gauge -->
+            <div class="hidden md:flex items-center gap-2">
+                <span class="text-[10px] font-mono text-slate-400">Clear Goal:</span>
+                <div class="w-32 bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-700">
+                    <div id="stageProgressBar" class="bg-cyan-500 h-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <span id="progressText" class="text-[10px] font-mono text-cyan-300">0/8</span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-6 font-mono text-xs">
+            <div>Score: <span id="hudScore" class="text-emerald-400 font-bold">0</span></div>
+            <div>Combo: <span id="hudCombo" class="text-amber-400 font-bold">0</span> <span id="hudMaxCombo" class="text-slate-500 text-[10px]">(Max: 0)</span></div>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex items-center gap-2">
+            <button id="pauseBtn" onclick="togglePauseGame()" class="px-3 py-1.5 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-md transition flex items-center gap-1">
+                <i class="fa-solid fa-pause"></i> <span>일시정지</span>
+            </button>
+            <button onclick="confirmStopGame()" class="px-3 py-1.5 text-[11px] font-semibold bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800 rounded-md text-rose-200 transition flex items-center gap-1">
+                <i class="fa-solid fa-stop"></i> <span>정지</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="relative flex-grow flex items-center justify-center p-4 z-10 mt-16">
+
+        <!-- [1] Auth Screen (Login & Signup) -->
+        <div id="authScreen" class="glass-panel w-full max-w-md p-8 rounded-2xl flex flex-col gap-6">
+            <div class="text-center">
+                <div class="inline-flex p-3 bg-cyan-950/50 border border-cyan-500/30 rounded-2xl mb-3">
+                    <i class="fa-solid fa-user-md text-3xl text-cyan-400"></i>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight text-white">SOAP Catcher 2.0</h1>
+                <p class="text-slate-400 text-xs mt-1">임상 수련 및 의무기록 분류 인증 시스템</p>
+            </div>
+
+            <!-- Tab Selectors -->
+            <div class="grid grid-cols-2 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                <button id="tabLogin" onclick="switchAuthTab('login')" class="py-2.5 rounded-lg text-sm font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/20 transition">로그인</button>
+                <button id="tabSignup" onclick="switchAuthTab('signup')" class="py-2.5 rounded-lg text-sm font-semibold text-slate-400 hover:text-white transition">회원가입</button>
+            </div>
+
+            <!-- Input Form -->
+            <div class="flex flex-col gap-3">
+                <div id="authNameWrapper" class="hidden flex flex-col gap-1">
+                    <label class="text-slate-400 text-[11px] font-mono">NAME (성명)</label>
+                    <input id="authName" type="text" placeholder="홍길동" class="w-full bg-slate-900/90 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-cyan-500 focus:outline-none transition text-white" />
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-slate-400 text-[11px] font-mono">USERNAME (ID)</label>
+                    <input id="authId" type="text" placeholder="아이디 입력" class="w-full bg-slate-900/90 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-cyan-500 focus:outline-none transition text-white" />
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-slate-400 text-[11px] font-mono">PASSWORD</label>
+                    <input id="authPw" type="password" placeholder="비밀번호 입력" class="w-full bg-slate-900/90 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-cyan-500 focus:outline-none transition text-white" />
+                </div>
+            </div>
+
+            <button id="authSubmitBtn" onclick="submitAuthForm()" class="w-full py-3 bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-sm rounded-xl transition shadow-lg shadow-cyan-950">
+                로그인 완료
+            </button>
+        </div>
+
+        <!-- [2] Welcome Lobby Screen -->
+        <div id="welcomeScreen" class="hidden glass-panel w-full max-w-lg p-8 rounded-2xl flex flex-col gap-6 text-center">
+            <div>
+                <span id="userBadge" class="px-2.5 py-1 bg-cyan-950/60 border border-cyan-400/30 rounded-full text-[10px] font-mono text-cyan-300 uppercase tracking-widest">Medical Candidate</span>
+                <h2 class="text-2xl font-bold mt-3">안녕하세요, <span id="welcomeUserName" class="text-cyan-400">학습자</span>님!</h2>
+                <p class="text-slate-400 text-xs mt-1">ID: <span id="welcomeUserId" class="font-mono text-slate-300">ID</span></p>
+            </div>
+
+            <!-- Attempt and Highscore metrics -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-center">
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-mono">My High Score</div>
+                    <div id="lobbyHighScore" class="text-xl font-bold text-amber-400">0</div>
+                </div>
+                <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-center">
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-mono">Training Attempts</div>
+                    <div id="lobbyAttempts" class="text-xl font-bold text-cyan-400">0</div>
+                </div>
+            </div>
+
+            <!-- Stage overview -->
+            <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-left space-y-2">
+                <h3 class="text-xs font-semibold text-slate-300 tracking-wider">클리니컬 트레이닝 코스 구성:</h3>
+                <div class="grid grid-cols-2 gap-2 text-[11px]">
+                    <div class="p-2 bg-slate-900 rounded border border-slate-800/80">
+                        <span class="text-amber-400 font-bold">1단계: S (주관적)</span>
+                        <p class="text-slate-500 mt-0.5">S만 수집 (목표 8개)</p>
+                    </div>
+                    <div class="p-2 bg-slate-900 rounded border border-slate-800/80">
+                        <span class="text-cyan-400 font-bold">2단계: O (객관적)</span>
+                        <p class="text-slate-500 mt-0.5">O만 수집 (목표 10개)</p>
+                    </div>
+                    <div class="p-2 bg-slate-900 rounded border border-slate-800/80">
+                        <span class="text-emerald-400 font-bold">3단계: A (사정)</span>
+                        <p class="text-slate-500 mt-0.5">A 수집 (응급 1회, 목표 10개)</p>
+                    </div>
+                    <div class="p-2 bg-slate-900 rounded border border-slate-800/80">
+                        <span class="text-purple-400 font-bold">4단계: P (계획)</span>
+                        <p class="text-slate-500 mt-0.5">P 수집 (응급 2회, 목표 10개)</p>
+                    </div>
+                </div>
+                <div class="p-2 bg-slate-900 rounded border border-amber-500/20 text-center text-amber-300 text-[10px]">
+                    ⚠️ <span class="font-bold">페널티 시스템</span>: 연속 3회 오답 시 해당 단계의 진행률이 즉시 초기화됩니다!
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <!-- 📄 수료증 조회 버튼 -->
+                <button id="viewCertBtn" onclick="viewSavedCertificate()" class="w-full py-3 bg-slate-900 hover:bg-slate-800 border border-cyan-500/30 text-cyan-300 hover:text-white rounded-xl font-bold text-sm tracking-wide transition shadow-lg flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-file-invoice"></i> 📄 수료증 조회 (이전 이력)
+                </button>
+                <button id="startGameBtn" onclick="startGameSession()" class="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 rounded-xl font-bold text-sm tracking-wide transition shadow-lg">
+                    임상 수련 시작하기 (Enter) <i class="fa-solid fa-play ml-1"></i>
+                </button>
+                <button onclick="logoutSession()" class="text-xs text-slate-500 hover:text-slate-300 transition underline py-1">
+                    다른 계정으로 로그인
+                </button>
+            </div>
+        </div>
+
+        <!-- [8] Stage Transition / Announcement Screen -->
+        <div id="stageTransitionScreen" class="hidden glass-panel w-full max-w-md p-8 rounded-2xl flex flex-col gap-6 text-center animate-fade-in">
+            <div class="text-center">
+                <div class="inline-flex p-3 bg-cyan-950/50 border border-cyan-500/30 rounded-2xl mb-1">
+                    <i class="fa-solid fa-circle-info text-2xl text-cyan-400 animate-pulse"></i>
+                </div>
+                <div class="mt-2">
+                    <span id="transBadge" class="px-2.5 py-0.5 bg-cyan-950 border border-cyan-500/30 rounded text-[10px] font-mono tracking-widest uppercase">Stage 1</span>
+                </div>
+                <h2 id="transTitle" class="text-2xl font-bold mt-4 text-white">S (주관적 자료) 집중훈련</h2>
+                <p id="transDesc" class="text-slate-400 text-xs mt-2 leading-relaxed">S 문항만 선별하여 바스켓으로 받으십시오.</p>
+                <div class="mt-4 p-3 bg-slate-900/80 rounded-xl border border-slate-800 text-left text-xs space-y-2">
+                    <div>🎯 <span class="font-bold text-cyan-400">클리어 조건:</span> <span id="transGoal">8개 정답</span></div>
+                    <div>⚠️ <span class="font-bold text-rose-400">실패 페널티:</span> 연속 3회 오답 시 해당 단계 초기화</div>
+                    <div id="transExtra" class="text-[11px] text-amber-300 leading-snug"></div>
+                </div>
+            </div>
+            <button id="transitionProceedBtn" onclick="proceedAfterTransition()" class="w-full py-3 bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-sm rounded-xl transition shadow-lg">
+                수련 시작하기 (Enter) <i class="fa-solid fa-arrow-right ml-1"></i>
+            </button>
+        </div>
+
+        <!-- [3] Game Playground Zone -->
+        <div id="gameZone" class="hidden absolute inset-0 overflow-hidden select-none">
+            <!-- Falling Cards Container -->
+            <div id="cardSpawningArea" class="absolute inset-0 z-10 pointer-events-none"></div>
+
+            <!-- Basket UI (50% Scaled) -->
+            <div id="movingBasket" class="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center border-2 border-cyan-400 rounded-lg bg-slate-900 font-black text-xs text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-transform duration-75" style="width: 48px; height: 48px;">
+                S
+            </div>
+
+            <!-- Touch Controls for Mobile/Tablet -->
+            <div class="absolute bottom-3 left-0 w-full px-4 flex justify-between pointer-events-none z-30">
+                <button id="touchLeftBtn" class="w-14 h-14 rounded-full bg-slate-900/60 border border-slate-700/60 flex items-center justify-center text-slate-300 text-xl pointer-events-auto active:bg-cyan-950 active:border-cyan-500 transition md:hidden">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <button id="touchRightBtn" class="w-14 h-14 rounded-full bg-slate-900/60 border border-slate-700/60 flex items-center justify-center text-slate-300 text-xl pointer-events-auto active:bg-cyan-950 active:border-cyan-500 transition md:hidden">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+
+            <!-- Emergency flash overlay -->
+            <div id="emergencyFlashOverlay" class="absolute inset-0 pointer-events-none border-[0px] border-rose-600 transition-all duration-300 z-40"></div>
+        </div>
+
+        <!-- [4] Pause Screen Overlay -->
+        <div id="pauseScreen" class="hidden fixed inset-0 bg-slate-950/85 backdrop-filter backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div class="glass-panel w-full max-w-sm p-6 rounded-2xl text-center flex flex-col gap-4">
+                <i class="fa-solid fa-circle-pause text-5xl text-amber-400"></i>
+                <h3 class="text-xl font-bold">임상 트레이닝 일시정지</h3>
+                <p class="text-slate-400 text-xs">학습 흐름이 정지되었습니다. 중지하고 돌아가면 진행 사항이 유실될 수 있습니다.</p>
+                <button id="pauseResumeBtn" onclick="togglePauseGame()" class="w-full py-3 bg-cyan-600 hover:bg-cyan-500 font-bold rounded-xl transition text-sm">
+                    계속 진행하기 (Enter)
+                </button>
+                <button onclick="confirmStopGame()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition text-xs text-slate-400">
+                    완전 정지 및 홈으로
+                </button>
+            </div>
+        </div>
+
+        <!-- [5] Review Test Screen (Clinical Audit) -->
+        <div id="reviewScreen" class="hidden glass-panel w-full max-w-2xl p-8 rounded-2xl flex flex-col gap-6 text-center">
+            <div>
+                <span class="px-2.5 py-1 bg-amber-950/60 border border-amber-400/30 rounded-full text-[10px] font-mono text-amber-300 uppercase tracking-widest">Stage 5: Clinical Audit</span>
+                <h2 class="text-2xl font-bold mt-3 text-white">1~4단계 임상 오답 검정소</h2>
+                <p class="text-slate-400 text-xs mt-1">완벽한 자격 획득을 위해 이전 단계에서 혼동했던 문제를 재점검합니다. (단축키: S, O, A, P 또는 1, 2, 3, 4)</p>
+            </div>
+
+            <!-- Card UI style container -->
+            <div class="bg-slate-900/90 border-2 border-amber-500/30 p-8 rounded-2xl flex flex-col items-center justify-center min-h-[160px] relative shadow-lg">
+                <div class="absolute top-2 left-3 text-[10px] font-mono text-slate-500">AUDIT CARD</div>
+                <div id="reviewProgress" class="absolute top-2 right-3 text-[10px] font-mono text-amber-400">1 / 5</div>
+                <p id="reviewQuestionText" class="text-xl md:text-2xl font-bold text-center text-slate-100 keep-all px-4" style="word-break: keep-all; line-height: 1.4;"></p>
+            </div>
+
+            <!-- Answer Buttons -->
+            <div class="flex flex-col gap-3">
+                <p class="text-xs text-slate-400">해당 임상 카드의 올바른 SOAP 분류를 선택하십시오.</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <button id="reviewBtnS" onclick="submitReviewAnswer('S')" class="p-4 bg-slate-800 hover:bg-amber-600 border border-slate-700 hover:border-amber-400 rounded-xl text-lg font-black transition">S</button>
+                    <button id="reviewBtnO" onclick="submitReviewAnswer('O')" class="p-4 bg-slate-800 hover:bg-cyan-600 border border-slate-700 hover:border-cyan-400 rounded-xl text-lg font-black transition">O</button>
+                    <button id="reviewBtnA" onclick="submitReviewAnswer('A')" class="p-4 bg-slate-800 hover:bg-emerald-600 border border-slate-700 hover:border-emerald-400 rounded-xl text-lg font-black transition">A</button>
+                    <button id="reviewBtnP" onclick="submitReviewAnswer('P')" class="p-4 bg-slate-800 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-xl text-lg font-black transition">P</button>
+                </div>
+            </div>
+            
+            <div id="reviewExplanationArea" class="hidden p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-left text-xs">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-cyan-400 font-bold">오답 해설:</span>
+                    <span class="text-slate-500 text-[9px]">Enter 입력 시 해설 닫기</span>
+                </div>
+                <p id="reviewExplanationText" class="text-slate-300">설명...</p>
+            </div>
+        </div>
+
+        <!-- [6] Stage 6 Final Board Exam Screen (Board Exam) -->
+        <div id="examScreen" class="hidden glass-panel w-full max-w-2xl p-8 rounded-2xl flex flex-col gap-6 text-center">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="text-left">
+                    <span class="px-2 py-0.5 bg-rose-950/60 border border-rose-500/30 rounded text-[9px] font-mono text-rose-300 uppercase tracking-widest">Stage 6: Final Board Exam</span>
+                    <h2 class="text-xl font-bold mt-1">임상 차트 최종 검정 시험</h2>
+                </div>
+                <div class="text-right font-mono text-xs">
+                    <span class="text-slate-400">진행률:</span> <span id="examProgressText" class="text-cyan-400 font-bold">0 / 12</span>
+                </div>
+            </div>
+
+            <!-- Exam card rendering area -->
+            <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-700 p-8 rounded-2xl flex flex-col items-center justify-center min-h-[180px] shadow-inner relative">
+                <div class="absolute top-2 left-3 text-[10px] font-mono text-slate-500">EXAM CARD</div>
+                <p id="examQuestionText" class="text-xl md:text-2xl font-bold text-center text-slate-100 leading-snug" style="word-break: keep-all;"></p>
+            </div>
+
+            <!-- Option Buttons -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                <button onclick="submitExamAnswer('S')" class="py-4 bg-amber-950/30 hover:bg-amber-600/50 border border-amber-800/40 rounded-xl text-lg font-extrabold transition">S</button>
+                <button onclick="submitExamAnswer('O')" class="py-4 bg-cyan-950/30 hover:bg-cyan-600/50 border border-cyan-800/40 rounded-xl text-lg font-extrabold transition">O</button>
+                <button onclick="submitExamAnswer('A')" class="py-4 bg-emerald-950/30 hover:bg-emerald-600/50 border border-emerald-800/40 rounded-xl text-lg font-extrabold transition">A</button>
+                <button onclick="submitExamAnswer('P')" class="py-4 bg-purple-950/30 hover:bg-purple-600/50 border border-purple-800/40 rounded-xl text-lg font-extrabold transition">P</button>
+            </div>
+
+            <div id="examFeedbackArea" class="hidden p-4 bg-slate-900 rounded-xl border border-slate-800 text-left">
+                <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-2">
+                        <span id="examResultBadge" class="px-2.5 py-0.5 rounded text-xs font-bold uppercase">정답</span>
+                        <span class="text-xs text-slate-400 font-mono">Feedback Insight</span>
+                    </div>
+                </div>
+                <p id="examFeedbackText" class="text-xs text-slate-300"></p>
+                <button id="examNextBtn" onclick="proceedToNextExamQuestion()" class="mt-3 w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-xs font-bold rounded-lg transition">다음 문항 진행 (Enter) ➔</button>
+            </div>
+        </div>
+
+        <!-- [9] Consecutive Wrongs Alert Modal -->
+        <div id="consecutiveWrongsModal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-filter backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div class="glass-panel w-full max-w-sm p-6 rounded-2xl text-center flex flex-col gap-4 border-rose-500/50 shadow-[0_0_30px_rgba(239,68,68,0.3)]">
+                <i class="fa-solid fa-triangle-exclamation text-5xl text-rose-500 animate-bounce"></i>
+                <h3 class="text-xl font-bold text-rose-400">경고: 오답 누적</h3>
+                <p class="text-slate-300 text-sm leading-relaxed">연속 3회 오답으로 인해 현재 단계를 처음부터 다시 시작합니다.</p>
+                <button id="consecutiveWrongsConfirmBtn" onclick="dismissConsecutiveWrongsModal()" class="w-full py-3 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 font-bold rounded-xl transition text-sm text-white shadow-lg shadow-rose-950">
+                    확인 (Enter)
+                </button>
+            </div>
+        </div>
+
+        <!-- [10] Custom Auth Notification Modal -->
+        <div id="authAlertModal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-filter backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div class="glass-panel w-full max-w-sm p-6 rounded-2xl text-center flex flex-col gap-4 border-cyan-500/50 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
+                <i id="authAlertIcon" class="fa-solid fa-circle-check text-5xl text-emerald-400 animate-bounce"></i>
+                <h3 id="authAlertTitle" class="text-xl font-bold text-white">알림</h3>
+                <p id="authAlertDesc" class="text-slate-300 text-sm leading-relaxed">알림 내용</p>
+                <button id="authAlertConfirmBtn" onclick="dismissAuthAlertModal()" class="w-full py-3 bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 font-bold rounded-xl transition text-sm text-white shadow-lg shadow-cyan-950">
+                    확인 (Enter)
+                </button>
+            </div>
+        </div>
+
+        <!-- [11] KakaoTalk / Mobile Image Fallback Modal -->
+        <div id="imageFallbackModal" class="hidden fixed inset-0 bg-slate-950/95 backdrop-filter backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
+            <div class="glass-panel w-full max-w-lg p-5 rounded-2xl text-center flex flex-col gap-3 border-emerald-500/50 max-h-[95vh] overflow-y-auto">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <h3 class="text-lg font-bold text-emerald-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-image"></i> 이수증 이미지 저장 (꾹 눌러서 저장)
+                    </h3>
+                    <button onclick="closeImageFallbackModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <p class="text-xs text-amber-300 leading-relaxed bg-amber-950/40 p-2.5 rounded-lg border border-amber-500/20 text-left">
+                    💡 <b>카카오톡/모바일 저장 방법:</b><br>
+                    아래의 이수증 이미지를 <b>약 2초간 꾹 누르고 계시면 (롱클릭/롱탭)</b>, 브라우저 메뉴창에 <b>[이미지 저장]</b> 또는 <b>[사진 앱에 추가]</b>가 나타납니다. 이를 선택해 갤러리에 안전하게 수기 보관해 주세요!
+                </p>
+                <div class="flex-grow overflow-auto border border-slate-700 rounded-xl bg-white p-1 flex justify-center">
+                    <img id="fallbackImageElement" class="max-w-full h-auto max-h-[50vh] rounded-lg shadow-inner object-contain" alt="이수증 수동 저장 이미지">
+                </div>
+                <button id="imageFallbackCloseBtn" onclick="closeImageFallbackModal()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl transition text-slate-300 border border-slate-700">
+                    닫기 (Enter)
+                </button>
+            </div>
+        </div>
+
+        <!-- [7] Result & Certificate Display Screen -->
+        <div id="resultScreen" class="hidden w-full max-w-2xl flex flex-col gap-4 max-h-[92vh] overflow-y-auto pr-1">
+            <!-- Elegant Printable Certificate -->
+            <div id="certificateContainer" class="bg-white text-slate-900 p-6 md:p-8 rounded-2xl shadow-2xl relative border-8 border-double border-cyan-700">
+                <!-- Certificate Decorative Icons -->
+                <div class="absolute top-4 right-4 text-cyan-700 opacity-15 text-7xl"><i class="fa-solid fa-award"></i></div>
+                <div class="absolute bottom-4 left-4 text-cyan-700 opacity-15 text-5xl"><i class="fa-solid fa-stamp"></i></div>
+
+                <!-- Title -->
+                <div class="text-center mb-6">
+                    <span class="text-[10px] tracking-widest font-mono text-cyan-700 uppercase font-black">Clinical SOAP Competency License</span>
+                    <h2 class="text-2xl md:text-3xl font-black text-slate-800 tracking-tight mt-1">임 상  이 수 증 명 서</h2>
+                    <div class="h-0.5 w-24 bg-cyan-600 mx-auto mt-2"></div>
+                </div>
+
+                <!-- Identity info -->
+                <div class="text-sm border-b border-slate-200 pb-3 mb-4">
+                    <div class="grid grid-cols-2 gap-2">
+                        <p class="mb-1"><strong class="text-slate-500 font-mono text-[11px] inline-block w-20">NAME (이름):</strong> <span id="certName" class="font-bold text-slate-800">홍길동</span></p>
+                        <p class="mb-1"><strong class="text-slate-500 font-mono text-[11px] inline-block w-20">NICKNAME (별명):</strong> <span id="certUserId" class="font-mono text-slate-700 font-bold">ID001</span></p>
+                    </div>
+                    <p class="mb-1"><strong class="text-slate-500 font-mono text-[11px] inline-block w-20">DATE (응시일):</strong> <span id="certDate" class="font-mono text-slate-700">2026.06.13</span></p>
+                </div>
+
+                <!-- Metrics scoreboard -->
+                <div class="grid grid-cols-4 gap-2 text-center mb-4">
+                    <div class="bg-slate-50 p-2 rounded border border-slate-100">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">SCORE (최종점수)</div>
+                        <div id="certScore" class="text-base font-extrabold text-slate-800">1200</div>
+                    </div>
+                    <div class="bg-slate-50 p-2 rounded border border-slate-100">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">ACCURACY (정답률)</div>
+                        <div id="certAccuracy" class="text-base font-extrabold text-cyan-700">92%</div>
+                    </div>
+                    <div class="bg-slate-50 p-2 rounded border border-slate-100">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">GRADE (등급)</div>
+                        <div id="certGrade" class="text-xs font-black text-emerald-600">마스터</div>
+                    </div>
+                    <div class="bg-slate-50 p-2 rounded border border-slate-100">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">MAX COMBO (최고콤보)</div>
+                        <div id="certCombo" class="text-base font-extrabold text-amber-600">12</div>
+                    </div>
+                </div>
+
+                <!-- Cumulative scoreboard metrics -->
+                <div class="grid grid-cols-2 gap-2 text-center mb-4">
+                    <div class="bg-cyan-50/50 p-2 rounded border border-cyan-100">
+                        <div class="text-[10px] text-cyan-600 font-bold uppercase font-mono">My High Score (최고점수)</div>
+                        <div id="certHighScore" class="text-sm font-black text-cyan-800">0</div>
+                    </div>
+                    <div class="bg-cyan-50/50 p-2 rounded border border-cyan-100">
+                        <div class="text-[10px] text-cyan-600 font-bold uppercase font-mono">Total Attempts (응시횟수)</div>
+                        <div id="certAttempts" class="text-sm font-black text-cyan-800">0</div>
+                    </div>
+                </div>
+
+                <!-- Statistics table -->
+                <div class="mb-4">
+                    <h4 class="text-xs font-bold text-slate-500 mb-1.5 uppercase font-mono tracking-wider">
+                        ✔ ① SOAP 영역별 평가 성적 <span class="text-[10px] text-cyan-700 lowercase">(5단계+6단계 결과 기준)</span>
+                    </h4>
+                    <table class="w-full text-center text-xs border border-slate-100 rounded-lg overflow-hidden">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 font-bold">
+                                <th class="py-1">영역</th>
+                                <th class="py-1">S (주관적)</th>
+                                <th class="py-1">O (객관적)</th>
+                                <th class="py-1">A (사정)</th>
+                                <th class="py-1">P (계획)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="text-slate-700 border-b border-slate-100">
+                                <td class="py-1.5 font-bold bg-slate-50">맞은 개수</td>
+                                <td id="tblScorS" class="font-semibold text-emerald-600">0</td>
+                                <td id="tblScorO" class="font-semibold text-emerald-600">0</td>
+                                <td id="tblScorA" class="font-semibold text-emerald-600">0</td>
+                                <td id="tblScorP" class="font-semibold text-emerald-600">0</td>
+                            </tr>
+                            <tr class="text-slate-700 border-b border-slate-100">
+                                <td class="py-1.5 font-bold bg-slate-50">틀린 개수</td>
+                                <td id="tblFailS" class="font-semibold text-rose-500">0</td>
+                                <td id="tblFailO" class="font-semibold text-rose-500">0</td>
+                                <td id="tblFailA" class="font-semibold text-rose-500">0</td>
+                                <td id="tblFailP" class="font-semibold text-rose-500">0</td>
+                            </tr>
+                            <tr class="text-slate-700 bg-slate-50/50">
+                                <td class="py-1.5 font-bold bg-slate-100">틀린 비율 (오답/총출제)</td>
+                                <td id="tblRatioS" class="font-extrabold text-rose-600">0/0</td>
+                                <td id="tblRatioO" class="font-extrabold text-rose-600">0/0</td>
+                                <td id="tblRatioA" class="font-extrabold text-rose-600">0/0</td>
+                                <td id="tblRatioP" class="font-extrabold text-rose-600">0/0</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Weak spots list -->
+                <div class="mb-4">
+                    <h4 class="text-xs font-bold text-slate-500 mb-1.5 uppercase font-mono tracking-wider">
+                        ✔ ② 틀린 문제 유형 리스트 <span class="text-[10px] text-cyan-700 lowercase">(5단계+6단계 오답)</span>
+                    </h4>
+                    <div id="certWrongList" class="space-y-1.5 text-[11px] text-slate-700 max-h-[140px] overflow-y-auto pr-1">
+                        <div class="text-center text-slate-400 py-2">기록된 오류가 없습니다. 완벽하게 완수하셨습니다!</div>
+                    </div>
+                </div>
+
+                <!-- Pattern feedback -->
+                <div class="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px] text-slate-700 space-y-1">
+                    <h4 class="font-bold text-slate-600 flex items-center gap-1">
+                        <i class="fa-solid fa-brain text-cyan-600"></i> ✔ ③ 인지적 분석 패턴 피드백 &amp; 재학습 권장 영역
+                    </h4>
+                    <p id="certFeedbackText">감정 오류 패턴 분석 중...</p>
+                </div>
+
+                <!-- Seal Footer -->
+                <div class="flex items-end justify-between border-t border-slate-200 pt-3 text-[10px] text-slate-400">
+                    <div>
+                        <p class="font-mono text-[9px]">CERTIFICATION CODE: <span id="certHashCode" class="text-cyan-700">SOAP-CATCH-FFFF</span></p>
+                        <p class="mt-0.5">본 증서는 SOAP Catcher Clinical Suite 학술 위원회의 공인 검증 결과입니다.</p>
+                    </div>
+                    <div class="text-right flex items-center gap-2">
+                        <div class="text-slate-700 font-bold">
+                            <p>SOAP Catcher</p>
+                            <p>학술 교육 위원회 [직인]</p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full border-2 border-red-500/80 flex items-center justify-center text-red-500 font-black text-[9px] rotate-12 uppercase leading-none">
+                            이수<br>완료
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download and share buttons -->
+            <div class="flex flex-col gap-3 z-50">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <button onclick="downloadCertificate('save')" class="py-3 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white font-bold rounded-xl transition text-sm flex items-center justify-center gap-1.5 shadow-lg">
+                        <i class="fa-solid fa-file-pdf"></i> 이수증 PDF 저장
+                    </button>
+                    <!-- 롱클릭 기반 이미지 구원책 버튼 배정 -->
+                    <button onclick="downloadAsImage()" class="py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl transition text-sm flex items-center justify-center gap-1.5 shadow-lg">
+                        <i class="fa-solid fa-image"></i> 이미지(PNG) 보기/저장 (카톡 권장)
+                    </button>
+                    <button onclick="shareKakaoStyle()" class="py-3 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded-xl transition text-sm flex items-center justify-center gap-1.5 shadow-lg">
+                        <i class="fa-solid fa-share-nodes"></i> 카카오톡 공유
+                    </button>
+                </div>
+                
+                <!-- 모바일 전용 수동 다운로드 대체 버튼 -->
+                <button id="mobilePdfFallbackBtn" onclick="downloadCertificate('view')" class="hidden w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 rounded-xl text-xs transition border border-cyan-800/40 flex items-center justify-center gap-1.5 font-bold">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> [모바일 전용] PDF 다운로드 실패 시 새 창(미리보기) 열기
+                </button>
+            </div>
+            
+            <button id="certReturnBtn" onclick="returnToLobby()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl text-xs transition border border-slate-700">
+                로비 화면으로 복귀 (Enter) <i class="fa-solid fa-rotate-left ml-1"></i>
+            </button>
+        </div>
+
+        <!-- Custom Toast Warnings -->
+        <div id="toastAlert" class="hidden fixed top-24 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-rose-900/95 border-2 border-rose-600 text-white font-bold rounded-full shadow-2xl flex items-center gap-2 animate-bounce text-sm">
+            <i class="fa-solid fa-circle-exclamation text-amber-300"></i>
+            <span id="toastAlertText">오류 경고 문구</span>
+        </div>
+    </main>
+
+    <!-- JS Logic and Dataset -->
+    <script>
+        const questions = [
+            // S (Subjective)
+            {t:"어지러워요.",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 스스로 어지럽다고 말하여 주관적으로 수집된 주소"},
+            {t:"숨차고 가슴이 답답해",a:"S",stages:[1,2,3,4,5,6],exp:"숨참과 가슴 답답함을 환자의 어휘로 구두 표현한 주관적..."},
+            {t:"옆구리가 쑤셔",a:"S",stages:[1,3,4,5,6],exp:"우측 옆구리 영역의 방사통 통증은 환자가 직접 느끼고 표현한 진술"},
+            {t:"울렁거려",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 직접 느끼고 표현하는 증상이므로 S(주관적 자료)이다."},
+            {t:"어제보다 두통이 더 심해",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 느낀 증상 변화에 대한 주관적 표현이므로 S(주관적 자료)이다."},
+            {t:"NRS 7점 이요",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 스스로 통증 정도를 수치로 표현한 주관적 자료이므로 S(주관적 자료)이다."},
+            {t:"숨이 차서 걷기 힘들어요",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 직접 호소한 호흡 관련 증상이므로 S(주관적 자료)이다."},
+            {t:"가슴이 답답해요",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 직접 느끼고 표현한 주관적 증상이므로 S(주관적 자료)이다."},
+            {t:"머리가 계속 아파요",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 지속적으로 호소하는 주관적 증상이므로 S(주관적 자료)이다."},
+            {t:"수술 부위가 쑤셔요",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 직접 호소한 통증이므로 S(주관적 자료)이다."},
+            {t:"어젯밤 잠을 거의 못 잤어요",a:"S",stages:[1,2,3,4,5,6],exp:"수면 상태에 대한 환자 진술로 S(주관적 자료)이다."},
+            {t:"음식 냄새만 맡아도 속이 메스꺼워요",a:"S",stages:[1,2,3,4,5,6],exp:"오심 증상 호소로 S(주관적 자료)이다."},
+            {t:"기침이 더 심해졌어요",a:"S",stages:[1,2,3,4,5,6],exp:"증상 변화에 대한 환자 진술로 S(주관적 자료)이다."},
+            {t:"불안해서 잠이 안 와요",a:"S",stages:[1,5,6],exp:"감정 및 증상 표현으로 S(주관적 자료)이다."},
+            {t:"식욕이 없어요",a:"S",stages:[1,5,6],exp:"환자의 느낌 and 경험은 S(주관적 자료)이다."},
+            {t:"왼쪽 다리가 저려요",a:"S",stages:[1,2,3,4,5,6],exp:"저림은 주관적 증상으로 S(주관적 자료)이다."},
+            {t:"배가 아파서 밥을 못 먹겠어요",a:"S",stages:[1,2,3,4,5,6],exp:"통증과 식사 상태에 대한 진술로 S(주관적 자료)이다."},
+            {t:"화장실을 자주 가고 싶어요",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 느끼는 배뇨 욕구로 S(주관적 자료)이다."},
+            {t:"목이 너무 말라요",a:"S",stages:[1,2,3,4,5,6],exp:"갈증은 주관적 증상으로 S(주관적 자료)이다."},
+            {t:"가래가 잘 안 나와요",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 느끼는 증상으로 S(주관적 자료)이다."},
+            {t:"심장이 빨리 뛰는 것 같아요",a:"S",stages:[1,2,3,4,5,6],exp:"느낌에 대한 표현으로 S(주관적 자료)이다."},
+            {t:"가슴 통증이 팔까지 퍼져요",a:"S",stages:[1,2,3,4,5,6],exp:"통증 양상 설명으로 S(주관적 자료)이다."},
+            {t:"숨쉴 때마다 아파요",a:"S",stages:[1,2,3,4,5,6],exp:"환자 증상 호소로 S(주관적 자료)이다."},
+            {t:"병실이 너무 추워요",a:"S",stages:[1,2,3,4,5,6],exp:"환자 체감 표현으로 S(주관적 자료)이다."},
+            {t:"오늘은 어제보다 덜 아파요",a:"S",stages:[1,2,3,4,5,6],exp:"통증 변화에 대한 환자 진술로 S(주관적 자료)이다."},
+            {t:"호소하는 증상 없음",a:"S",stages:[1,2,3,4,5,6],exp:"환자가 현재 증상이 없다고 표현한 내용으로 주관적 자료(S)이다."},
+            {t:"통증 호소 없음.",a:"S",stages:[1,2,4,5,6],exp:"통증이 없다는 환자의 진술 역시 S(주관적 자료)이다"},
+            {t:"어지럼증 부인함.",a:"S",stages:[1,2,3,4,5,6],exp:"증상을 부인하는 내용도 환자 진술이므로 S(주관적 자료)이다."},
+            {t:"의식저하로 주관적 증상 확인 불가",a:"S",stages:[1,2,3,4,5,6],exp:"의식저하로 환자 진술을 직접 수집할 수 없으므로 S(주관적 자료)이다."},
+            {t:"기관삽관 상태로 의사소통 불가",a:"S",stages:[1,2,3,4,5,6],exp:"기관삽관으로 환자의 직접적인 증상 진술을 얻을 수 없으므로 S(주관적 자료)이다."},
+            {t:"실어증으로 증상 표현 어려움.",a:"S",stages:[1,2,3,4,5,6],exp:"실어증으로 환자의 증상 진술을 정확히 얻을 수 없으므로 S(주관적 자료)이다."},
+            {t:"치매로 정확한 증상 확인 어려움.",a:"S",stages:[1,2,3,4,5,6],exp:"치매로 인해 환자의 정확한 증상 진술을 신뢰하기 어려우므로 S(주관적 자료)이다."},
+
+            // O (Objective)
+            {t:"BP 180/100 mmHg",a:"O",stages:[1,2,3,4,5,6],exp:"혈압계를 이용해 직접 측정된 객관적 수치이므로 O(객관적 자료)이다."},
+            {t:"체온 38.5도",a:"O",stages:[1,2,3,4,5,6],exp:"체온계로 측정된 정량적 수치이므로 O(객관적 자료)이다."},
+            {t:"SpO2 89% 측정",a:"O",stages:[1,2,3,4,5,6],exp:"산소포화도 측정기로 계측된 객관적 수치이다."},
+            {t:"WBC 12,000",a:"O",stages:[1,2,3,4,5,6],exp:"혈액검사로 확인된 정량적 검사 결과이므로 O(객관적 자료)이다."},
+            {t:"우측 폐 수포음",a:"O",stages:[1,2,3,4,5,6],exp:"청진기를 통해 의료진이 직접 확인한 객관적 신체 소견이므로 O(객관적 자료)이다."},
+            {t:"혈당 286mg/dL",a:"O",stages:[1,2,3,4,5,6],exp:"혈당 측정기로 확인된 정량적 검사 결과이므로 O(객관적 자료)이다."},
+            {t:"수술부위 발적",a:"O",stages:[1,2,3,4,5,6],exp:"의료진이 직접 관찰하여 확인한 신체 소견이므로 O(객관적 자료)이다."},
+            {t:"낙상 상태 발견",a:"O",stages:[1,2,3,4,5,6],exp:"의료진이 직접 관찰한 사실이므로 O(객관적 자료)이다."},
+            {t:"안면 창백함 관찰됨",a:"O",stages:[1,2,3,4,5,6],exp:"의료진이 직접 관찰하여 확인한 신체 소견이므로 O(객관적 자료)이다."},
+            {t:"하지 부종 관찰됨",a:"O",stages:[1,2,3,4,5,6],exp:"의료진이 직접 관찰하여 확인한 신체 소견이므로 O(객관적 자료)이다."},
+            {t:"구토 2회",a:"O",stages:[1,2,3,4,5,6],exp:"실제 발생 횟수로 확인 가능한 객관적 사건이므로 O(객관적 자료)이다."},
+            {t:"보행 시 비틀거림",a:"O",stages:[1,2,3,4,5,6],exp:"의료진이 직접 관찰한 움직임 이상 소견이므로 O(객관적 자료)이다."},
+            {t:"혈뇨 관찰됨",a:"O",stages:[1,2,3,4,5,6],exp:"소변 색 변화가 관찰된 객관적 검사·관찰 결과이므로 O(객관적 자료)이다."},
+            {t:"Chest X-ray상 폐침윤 확인",a:"O",stages:[1,2,3,4,5,6],exp:"영상검사(X-ray)로 확인된 객관적 검사 결과이므로 O(객관적 자료)이다."},
+            {t:"SPO2 85%까지 감소함",a:"O",stages:[1,2,3,4,5,6],exp:"산소포화도 측정기로 확인된 객관적 수치 변화이므로 O(객관적 자료)이다."},
+            {t:"드레싱 삼출물",a:"O",stages:[1,2,3,4,5,6],exp:"의료진이 직접 관찰한 상처 부위의 객관적 소견이므로 O(객관적 자료)이다."},
+            {t:"체중 3kg 증가",a:"O",stages:[1,2,3,4,5,6],exp:"저울로 측정된 정량적 수치 변화이므로 O(객관적 자료)이다."},
+            {t:"맥박 118회/분",a:"O",stages:[1,2,3,4,5,6],exp:"의료기기로 측정된 활력징후의 정량적 수치이므로 O(객관적 자료)이다."},
+            {t:"객담 다량 배출됨",a:"O",stages:[1,2,3,4,5,6],exp:"의료진이 직접 관찰한 객관적 배출 소견이므로 O(객관적 자료)이다."},
+            {t:"동공 3mm/3mm",a:"O",stages:[1,2,3,4,5,6],exp:"신체검진으로 확인된 객관적 측정 소견이므로 O(객관적 자료)이다."},
+            {t:"하지 근력 Grade 4/5",a:"O",stages:[1,2,3,4,5,6],exp:"신경학적 신체검진을 통해 측정된 객관적 평가 결과이므로 O(객관적 자료)이다."},
+            {t:"복부 압통 관찰됨",a:"O",stages:[1,2,3,4,5,6],exp:"신체검진 시 의료진이 직접 확인한 객관적 소견이므로 O(객관적 자료)이다."},
+            {t:"하지 요흔부종 2+",a:"O",stages:[1,2,3,4,5,6],exp:"신체검진으로 확인된 객관적 부종 정도의 평가 결과이므로 O(객관적 자료)이다."},
+            {t:"경부 강직 관찰됨",a:"O",stages:[1,2,3,4,5,6],exp:"신체검진을 통해 의료진이 직접 확인한 객관적 신경학적 소견이므로 O(객관적 자료)이다."},
+            {t:"의식:기면상태",a:"O",stages:[1,2,3,4,5,6],exp:"의료진이 관찰하여 평가한 의식 수준이므로 O(객관적 자료)이다."},
+
+            // A (Assessment)
+            {t:"고혈압 의심",a:"A",stages:[1,2,3,4,5,6],exp:"혈압 측정 결과를 해석한 임상적 판단이므로 A(사정)"},
+            {t:"비효율적 호흡",a:"A",stages:[1,2,3,4,5,6],exp:"호흡 상태를 종합적으로 해석한 임상적 판단이므로 A(사정)이다."},
+            {t:"피부 손상 위험성",a:"A",stages:[1,2,3,4,5,6],exp:"현재 상태를 바탕으로 향후 발생 가능성을 평가한 판단이므로 A(사정)이다."},
+            {t:"비효율적 환기",a:"A",stages:[1,2,3,4,5,6],exp:"측정·관찰한 사실이 아니라 객관적 자료를 종합해 내린 임상적 판단으로 A"},
+            {t:"요로감염 재발",a:"A",stages:[1,2,3,4,5,6],exp:"증상과 검사결과를 종합하여 내린 임상적 판단이므로 A(사정)이다."},
+            {t:"체액 과다",a:"A",stages:[1,2,3,4,5,6],exp:"관찰 및 검사 결과를 종합해 평가한 상태이므로 A(사정)이다."},
+            {t:"혈당 조절 부족",a:"A",stages:[1,2,3,4,5,6],exp:"혈당 검사 결과를 해석하여 평가한 상태이므로 A(사정)이다."},
+            {t:"수면장애",a:"A",stages:[1,2,3,4,5,6],exp:"수면 상태를 종합적으로 평가한 결과이므로 A(사정)이다."},
+            {t:"출혈 위험성",a:"A",stages:[1,2,4,5,6],exp:"현재 상태를 바탕으로 출혈 가능성을 평가한 판단이므로 A(사정)"},
+            {t:"감염 위험성",a:"A",stages:[1,2,4,5,6],exp:"현재 상태를 바탕으로 감염 가능성을 평가한 판단이므로 A(사정)이다."},
+            {t:"흡인 위험성",a:"A",stages:[1,2,3,4,5,6],exp:"현재 상태를 바탕으로 흡인 발생 가능성을 평가한 판단이므로 A(사정)이다."},
+            {t:"통증 조절 부족",a:"A",stages:[1,2,3,4,5,6],exp:"통증 관련 자료를 종합하여 평가한 상태이므로 A(사정)이다."},
+            {t:"뇌수막염 의심",a:"A",stages:[1,2,3,4,5,6],exp:"증상과 검사 결과를 종합하여 내린 임상적 판단이므로 A(사정)이다."},
+            {t:"패혈증 진행",a:"A",stages:[1,2,3,4,5,6],exp:"임상 증상과 검사 결과를 종합하여 판단한 상태이므로 A(사정)이다."},
+            {t:"급성 신손상",a:"A",stages:[1,2,3,4,5,6],exp:"검사 결과와 임상 상태를 종합하여 판단한 상태이므로 A(사정)이다."},
+            {t:"전해질 불균형",a:"A",stages:[1,2,3,4,5,6],exp:"검사 결과를 해석하여 평가한 상태이므로 A(사정)이다."},
+            {t:"수술 후 출혈 위험성",a:"A",stages:[1,2,3,4,5,6],exp:"수술 후 상태를 바탕으로 출혈 가능성을 평가한 판단이므로 A(사정)이다."},
+            {t:"수술 후 회복이 지연",a:"A",stages:[1,2,3,4,5,6],exp:"수술 후 경과를 종합적으로 평가한 상태이므로 A(사정)이다."},
+            {t:"수술 후 폐합병증 위험",a:"A",stages:[1,2,3,4,5,6],exp:"수술 후 상태를 바탕으로 폐합병증 발생 가능성을 평가한 판단이므로 A(사정)이다."},
+            {t:"수술 후 배뇨장애",a:"A",stages:[1,2,3,4,5,6],exp:"수술 후 배뇨 상태를 종합적으로 평가한 결과이므로 A(사정)이다."},
+
+            // P (Plan)
+            {t:"내일 아침 혈액검사 예정",a:"P",stages:[1,2,3,4,5,6],exp:"앞으로 시행할 검사 계획을 기록한 내용이므로 P(계획)이다."},
+            {t:"O₂ 2L 유지",a:"P",stages:[1,2,3,4,5,6],exp:"시행 또는 유지할 치료 계획을 기록한 내용이므로 P(계획)이다."},
+            {t:"복부 CT 예정",a:"P",stages:[1,2,3,4,5,6],exp:"향후 시행할 검사 계획을 기록한 내용이므로 P(계획)이다."},
+            {t:"V/S 2시간마다 관찰",a:"P",stages:[1,2,3,4,5,6],exp:"환자 상태를 주기적으로 확인하기 위한 모니터링 계획이므로 P(계획)이다."},
+            {t:"v/s 1시간 후 재측정",a:"P",stages:[1,2,3,4,5,6],exp:"환자 상태를 일정 시간 후 다시 확인하기 위한 계획이므로 P(계획)이다."},
+            {t:"통증을 재평가",a:"P",stages:[1,2,4,5,6],exp:"치료 후 효과를 확인하기 위한 추적 계획이므로 P(계획)이다."},
+            {t:"낙상 예방 교육",a:"P",stages:[1,2,3,4,5,6],exp:"환자 안전을 위한 교육 및 중재 계획이므로 P(계획)이다."},
+            {t:"수분 섭취 격려",a:"P",stages:[1,2,3,4,5,6],exp:"환자 상태 개선을 위한 중재 계획이므로 P(계획)이다."},
+            {t:"Dressing 교환",a:"P",stages:[1,2,3,4,5,6],exp:"처치 및 상처 관리를 위한 수행 계획이므로 P(계획)이다."},
+            {t:"필요시 해열제 투여",a:"P",stages:[1,2,3,4,5,6],exp:"증상 발생 시 시행하는 약물 중재 계획이므로 P(계획)이다."},
+            {t:"보호자에게 설명함",a:"P",stages:[1,2,3,4,5,6],exp:"치료 및 간호에 대한 교육·설명 계획이므로 P(계획)이다."},
+            {t:"배뇨 모니터링",a:"P",stages:[1,2,3,4,5,6],exp:"환자의 상태 변화를 지속적으로 관찰하기 위한 계획이므로 P(계획)이다."},
+            {t:"협진을 의뢰",a:"P",stages:[1,2,3,4,5,6],exp:"다른 전문과 협진을 요청하는 치료 계획이므로 P(계획)이다."},
+            {t:"MRI 설명 및 의뢰",a:"P",stages:[1,2,3,4,5,6],exp:"검사 필요성을 설명하고 시행을 준비하는 계획이므로 P(계획)이다."},
+            {t:"수혈 필요성 설명함.",a:"P",stages:[1,2,3,4,5,6],exp:"치료 필요성을 환자에게 설명하는 교육 및 중재 계획이므로 P(계획)이다."},
+            {t:"금식 설명",a:"P",stages:[1,2,3,4,5,6],exp:"검사·시술 전 준비를 위한 교육 계획이므로 P(계획)이다."},
+            {t:"약물 복용법 설명",a:"P",stages:[1,2,3,4,5,6],exp:"약물 사용 방법을 안내하는 교육 계획이므로 P(계획)이다."},
+            {t:"요양병원으로 전원",a:"P",stages:[1,2,3,4,5,6],exp:"환자의 향후 치료 및 이송 계획을 결정한 내용이므로 P(계획)이다."},
+            {t:"자의퇴원함.",a:"P",stages:[1,2,3,4,5,6],exp:"환자의 퇴원 형태를 결정한 계획이므로 P(계획)이다."},
+            {t:"사망함.",a:"P",stages:[1,2,3,4,5,6],exp:"치료 종료 상태를 기록한 결과이므로 P(계획)이다."},
+            {t:"PRC 2pint 수혈",a:"P",stages:[1,2,3,4,5,6],exp:"혈액제제 투여를 시행하는 치료 계획이므로 P(계획)이다."},
+            {t:"익일 수술 예정",a:"P",stages:[1,2,3,4,5,6],exp:"향후 시행될 수술 계획을 기록한 내용이므로 P(계획)이다."}
+        ];
+
+        const APP_VERSION = "2.0";
+        let currentUser = null;
+        let activeTab = "login";
+        let pendingStage = 1; // Stage tracking indicator for announcement modal
+
+        // Auth success callback holder
+        let authAlertCallback = null;
+
+        // Sound synthesizer using Web Audio API
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'correct') {
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // E5
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+                } else if (type === 'wrong') {
+                    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+                } else if (type === 'emergency') {
+                    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+                } else if (type === 'levelup') {
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // E5
+                    osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); // G5
+                    osc.frequency.setValueAtTime(1046.50, audioCtx.currentTime + 0.3); // C6
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+                } else if (type === 'reset') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(120, audioCtx.currentTime + 0.2);
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+                }
+            } catch (e) { console.warn("Audio Context blocked or unsupported:", e); }
+        }
+
+        function isKakaoTalk() {
+            return /KAKAOTALK/i.test(navigator.userAgent);
+        }
+
+        function transitionToStage(nextStageNumber) {
+            console.log(`[STAGE MANAGER] Stage Shift Requested: ${stage} -> ${nextStageNumber}`);
+            if (nextStageNumber < 1 || nextStageNumber > 6) {
+                console.error("[STAGE MANAGER] Attempted invalid stage number:", nextStageNumber);
+                return;
+            }
+            terminateGameLoop();
+            showStageAnnouncement(nextStageNumber);
+        }
+
+        // Auth Tab Switcher
+        function switchAuthTab(tab) {
+            activeTab = tab;
+            const tabL = document.getElementById("tabLogin");
+            const tabS = document.getElementById("tabSignup");
+            const nameWrapper = document.getElementById("authNameWrapper");
+            const btn = document.getElementById("authSubmitBtn");
+
+            if (tab === 'login') {
+                tabL.className = "py-2.5 rounded-lg text-sm font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/20 transition";
+                tabS.className = "py-2.5 rounded-lg text-sm font-semibold text-slate-400 hover:text-white transition";
+                nameWrapper.classList.add("hidden");
+                btn.innerText = "로그인 완료";
+            } else {
+                tabS.className = "py-2.5 rounded-lg text-sm font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/20 transition";
+                tabL.className = "py-2.5 rounded-lg text-sm font-semibold text-slate-400 hover:text-white transition";
+                nameWrapper.classList.remove("hidden");
+                btn.innerText = "회원가입 완료";
+            }
+        }
+
+        // Custom Auth alert modal
+        function showAuthAlert(title, desc, type, callback = null) {
+            const modal = document.getElementById("authAlertModal");
+            const titleEl = document.getElementById("authAlertTitle");
+            const descEl = document.getElementById("authAlertDesc");
+            const iconEl = document.getElementById("authAlertIcon");
+
+            titleEl.innerText = title;
+            descEl.innerText = desc;
+            authAlertCallback = callback;
+
+            if (type === 'success') {
+                iconEl.className = "fa-solid fa-circle-check text-5xl text-emerald-400 animate-bounce";
+            } else if (type === 'warning') {
+                iconEl.className = "fa-solid fa-triangle-exclamation text-5xl text-amber-400 animate-bounce";
+            } else {
+                iconEl.className = "fa-solid fa-triangle-exclamation text-5xl text-rose-500 animate-bounce";
+            }
+
+            modal.classList.remove("hidden");
+        }
+
+        function dismissAuthAlertModal() {
+            document.getElementById("authAlertModal").classList.add("hidden");
+            if (authAlertCallback) {
+                authAlertCallback();
+                authAlertCallback = null;
+            }
+        }
+
+        function submitAuthForm() {
+            const id = document.getElementById("authId").value.trim();
+            const pw = document.getElementById("authPw").value.trim();
+            const name = document.getElementById("authName").value.trim();
+
+            if (!id || !pw) {
+                showToastAlert("아이디와 비밀번호를 모두 입력하십시오.");
+                return;
+            }
+
+            if (activeTab === 'signup') {
+                if (!name) {
+                    showToastAlert("성명을 입력해 주십시오.");
+                    return;
+                }
+                const userData = { 
+                    id, 
+                    pw, 
+                    name, 
+                    attempts: 0, 
+                    highScore: 0, 
+                    timestamp: Date.now() 
+                };
+                localStorage.setItem(`soap_usr_${id}`, JSON.stringify(userData));
+                
+                showAuthAlert("회원가입 성공", "회원가입이 완료되었습니다! 로그인해 주세요.", "success", () => {
+                    switchAuthTab('login');
+                    document.getElementById("authName").value = "";
+                });
+            } else {
+                const saved = localStorage.getItem(`soap_usr_${id}`);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.pw === pw) {
+                        currentUser = parsed;
+                        if (!currentUser.attempts) currentUser.attempts = 0;
+                        if (!currentUser.highScore) currentUser.highScore = 0;
+                        showToastAlert("성공적으로 로그인되었습니다.");
+                        showWelcomeLobby();
+                    } else {
+                        showToastAlert("비밀번호가 일치하지 않습니다.");
+                    }
+                } else {
+                    showToastAlert("등록되지 않은 사용자입니다. 회원가입을 먼저 진행하십시오.");
+                }
+            }
+        }
+
+        function showWelcomeLobby() {
+            document.getElementById("authScreen").classList.add("hidden");
+            document.getElementById("welcomeScreen").classList.remove("hidden");
+            document.getElementById("welcomeUserName").innerText = currentUser.name;
+            document.getElementById("welcomeUserId").innerText = currentUser.id;
+            
+            document.getElementById("lobbyHighScore").innerText = currentUser.highScore || 0;
+            document.getElementById("lobbyAttempts").innerText = currentUser.attempts || 0;
+
+            // 카카오톡 인앱 브라우저 감지 시 친절하게 외부 이동 권고 팝업 가동
+            if (isKakaoTalk()) {
+                setTimeout(() => {
+                    showAuthAlert(
+                        "카카오톡 인앱 브라우저 감지", 
+                        "현재 카카오톡 내부 브라우저에서 실행 중입니다. 카카오톡의 전용 보안 제한으로 인해 PDF 이수증 다운로드 기능이 차단됩니다. 안전한 보관을 위해 우측 상단 '···' 메뉴를 클릭하고 [다른 브라우저로 열기](Chrome/Safari)를 실행하신 후 수련을 완성해 주십시오.", 
+                        "warning"
+                    );
+                }, 500);
+            }
+        }
+
+        // 📄 이전 이수증 조회 및 복원 복제 시스템
+        function viewSavedCertificate() {
+            if (!currentUser) {
+                showToastAlert("로그인이 필요합니다.");
+                return;
+            }
+            const saved = localStorage.getItem(`soap_usr_${currentUser.id}`);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed.certData) {
+                    score = parsed.certData.score;
+                    maxCombo = parsed.certData.maxCombo || 0;
+                    stage56Total = parsed.certData.stage56Total || { S: 0, O: 0, A: 0, P: 0 };
+                    stage56Correct = parsed.certData.stage56Correct || { S: 0, O: 0, A: 0, P: 0 };
+                    stage56WrongList = parsed.certData.stage56WrongList || [];
+                    
+                    document.getElementById("welcomeScreen").classList.add("hidden");
+                    compileFinalCertificate();
+                    
+                    if (parsed.certData.date) {
+                        document.getElementById("certDate").innerText = parsed.certData.date;
+                    }
+                    showToastAlert("저장되어 있던 최근 수료증 이력을 성공적으로 조회했습니다.");
+                } else {
+                    showToastAlert("아직 수련을 마친 이력이 없습니다. 수련을 완료하고 첫 수료증을 획득하십시오!");
+                }
+            } else {
+                showToastAlert("사용자 정보를 찾을 수 없습니다.");
+            }
+        }
+
+        function logoutSession() {
+            currentUser = null;
+            document.getElementById("welcomeScreen").classList.add("hidden");
+            document.getElementById("authScreen").classList.remove("hidden");
+            document.getElementById("authId").value = "";
+            document.getElementById("authPw").value = "";
+        }
+
+        let toastTimeout;
+        function showToastAlert(msg) {
+            const t = document.getElementById("toastAlert");
+            const txt = document.getElementById("toastAlertText");
+            txt.innerText = msg;
+            t.classList.remove("hidden");
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => { t.classList.add("hidden"); }, 3000);
+        }
+
+        let gameActive = false;
+        let isPaused = false;
+        let score = 0;
+        let combo = 0;
+        let maxCombo = 0;
+        let gameInterval = null;
+        let stage = 1;
+        let correctCount = 0;
+        let consecutiveWrongs = 0;
+
+        // Basket parameters
+        let basketX = window.innerWidth / 2;
+        const basketSpeed = 15;
+        let keysPressed = {};
+
+        // Active drop items
+        let activeCards = [];
+        let cardSpawnTimeout = null;
+        let lastSpawnedCategory = null; 
+        let lastSpawnedText = null;     
+        let recentQuestions = [];       
+
+        // Statistics metrics
+        let stage56Total = { S: 0, O: 0, A: 0, P: 0 };
+        let stage56Correct = { S: 0, O: 0, A: 0, P: 0 };
+        let stage56WrongList = []; 
+
+        let stage1to4Wrongs = []; 
+
+        // Emergency status parameters
+        let emergencyActive = false;
+        let emergencyTimeLeft = 0;
+        let stage3EmergencyTriggered = false;
+        let stage4EmergencyCounts = 0; 
+
+        // Configuration sets
+        const STAGE_GOALS = { 1: 8, 2: 10, 3: 10, 4: 10 };
+        const STAGE_TARGETS = { 1: 'S', 2: 'O', 3: 'A', 4: 'P' };
+
+        // Delta Time (dt) system variables for frame-rate independence
+        let lastTime = 0;
+        let touchLeftActive = false;
+        let touchRightActive = false;
+
+        function getBaseSpeed() {
+            if (emergencyActive) {
+                return 4.5;
+            }
+            let speed = 1.5; 
+            if (stage === 2) speed = 2.2; 
+            else if (stage === 3 || stage === 4) speed = 3.0; 
+            return speed;
+        }
+
+        function getSpawnInterval() {
+            let interval = 2800; 
+            if (stage === 2) interval = 2300; 
+            else if (stage === 3 || stage === 4) interval = 1700; 
+
+            if (emergencyActive) interval *= 0.75; 
+            return interval;
+        }
+
+        function updateHUDCounters() {
+            document.getElementById("hudStage").innerText = stage;
+            document.getElementById("hudScore").innerText = score;
+            document.getElementById("hudCombo").innerText = combo;
+            document.getElementById("hudMaxCombo").innerText = maxCombo;
+
+            const targetGoal = STAGE_GOALS[stage] || 10;
+            document.getElementById("progressText").innerText = `${correctCount}/${targetGoal}`;
+            
+            const progressPct = Math.min(100, (correctCount / targetGoal) * 100);
+            document.getElementById("stageProgressBar").style.width = `${progressPct}%`;
+        }
+
+        function showStageAnnouncement(targetStage) {
+            pendingStage = targetStage;
+            
+            if (gameInterval) clearInterval(gameInterval);
+            if (cardSpawnTimeout) clearTimeout(cardSpawnTimeout);
+            
+            const spawnArea = document.getElementById("cardSpawningArea");
+            if (spawnArea) spawnArea.innerHTML = "";
+            activeCards = [];
+            gameActive = false;
+
+            document.getElementById("authScreen").classList.add("hidden");
+            document.getElementById("welcomeScreen").classList.add("hidden");
+            document.getElementById("gameZone").classList.add("hidden");
+            document.getElementById("hud").classList.add("hidden");
+            document.getElementById("pauseScreen").classList.add("hidden");
+            document.getElementById("reviewScreen").classList.add("hidden");
+            document.getElementById("examScreen").classList.add("hidden");
+            document.getElementById("resultScreen").classList.add("hidden");
+            document.getElementById("consecutiveWrongsModal").classList.add("hidden");
+            document.getElementById("imageFallbackModal").classList.add("hidden");
+
+            const transScreen = document.getElementById("stageTransitionScreen");
+            transScreen.classList.remove("hidden");
+
+            const badge = document.getElementById("transBadge");
+            const title = document.getElementById("transTitle");
+            const desc = document.getElementById("transDesc");
+            const goal = document.getElementById("transGoal");
+            const extra = document.getElementById("transExtra");
+
+            if (targetStage === 1) {
+                badge.innerText = "Stage 1";
+                badge.className = "px-2.5 py-0.5 bg-amber-950 border border-amber-500/30 rounded text-[10px] font-mono tracking-widest text-amber-400 uppercase font-black";
+                title.innerText = "S (주관적 자료) 집중훈련";
+                desc.innerText = "환자가 의료진에게 구두로 호소한 주관적 통증, 느낌, 병력 청취(S) 문항만 식별하십시오.";
+                goal.innerText = "S 8개 정답";
+                extra.innerHTML = "✨ <strong>팁:</strong> 같은 유형의 문항이 연속으로 출제되지 않도록 필터 보정이 이루어집니다.";
+            } else if (targetStage === 2) {
+                badge.innerText = "Stage 2";
+                badge.className = "px-2.5 py-0.5 bg-cyan-950 border border-cyan-500/30 rounded text-[10px] font-mono tracking-widest text-cyan-400 uppercase font-black";
+                title.innerText = "O (객관적 자료) 집중훈련";
+                desc.innerText = "장비, 혈액검사 수치, 청진, 육안 발적 및 신체검진 등 정량적인 객관적 자료(O)만 선별 수집하십시오.";
+                goal.innerText = "O 10개 정답";
+                extra.innerHTML = "⚡ <strong>가속 경보:</strong> 낙하 한계 도달 및 이동 속도가 1단계보다 빠르게 상승합니다.";
+            } else if (targetStage === 3) {
+                badge.innerText = "Stage 3";
+                badge.className = "px-2.5 py-0.5 bg-emerald-950 border border-emerald-500/30 rounded text-[10px] font-mono tracking-widest text-emerald-400 uppercase font-black";
+                title.innerText = "A (사정/판단) 집중훈련";
+                desc.innerText = "수집된 임상 데이터를 의료진이 해석하여 내린 판단, 진단의심, 감염위험성(A) 진술 카드만 바스켓에 담으십시오.";
+                goal.innerText = "A 10개 정답";
+                extra.innerHTML = "🚨 <strong>응급 위기:</strong> 정답 5개 달성 시 15초간 카드 낙하 속도 증가 및 더블 스코어(2배 점수) 획득 찬스 가동!";
+            } else if (targetStage === 4) {
+                badge.innerText = "Stage 4";
+                badge.className = "px-2.5 py-0.5 bg-purple-950 border border-purple-500/30 rounded text-[10px] font-mono tracking-widest text-purple-400 uppercase font-black";
+                title.innerText = "P (수행계획) 집중훈련";
+                desc.innerText = "향후 처치, 예정된 약물 처방, 수술 스케줄, 교육 및 모니터링 수립 계획(P) 문항만을 식별해 받으십시오.";
+                goal.innerText = "P 10개 정답";
+                extra.innerHTML = "🚨 <strong>초비상 응급:</strong> 훈련 도중 각각 3개, 7개 돌파 시 15초 동안 총 2회의 고속 응급 타임어택이 펼쳐집니다!";
+            } else if (targetStage === 5) {
+                badge.innerText = "Stage 5";
+                badge.className = "px-2.5 py-0.5 bg-amber-900 border border-amber-500/30 rounded text-[10px] font-mono tracking-widest text-amber-300 uppercase font-black";
+                title.innerText = "임상 오답 검정소 (Clinical Audit)";
+                desc.innerText = "1~4단계에서 실수로 놓쳤거나 잘못 가공했던 취약한 임상 차트를 오직 터치 클릭을 통해 교정해내는 재시험 코스입니다.";
+                goal.innerText = "기록된 이전 취약 문항 무감점 완수";
+                extra.innerHTML = "📝 <strong>조작법:</strong> 본 단계는 화면에서 떨어지는 카드가 존재하지 않는 완벽한 클릭 인터페이스입니다.";
+            } else if (targetStage === 6) {
+                badge.innerText = "Stage 6";
+                badge.className = "px-2.5 py-0.5 bg-rose-950 border border-rose-500/30 rounded text-[10px] font-mono tracking-widest text-rose-300 uppercase font-black";
+                title.innerText = "최종 임상 종합 평가 (Board Exam)";
+                desc.innerText = "S, O, A, P 영역별로 정확히 3문제씩 균형적으로 구성된 총 12개의 차트 분류 종합 시험입니다.";
+                goal.innerText = "총 12개 문항 최종 평가";
+                extra.innerHTML = "🏆 <strong>평가 지표:</strong> 이 시험과 5단계의 기록만 실제 공인 수료증의 결과 명세에 직접 포함됩니다.";
+            }
+        }
+
+        function proceedAfterTransition() {
+            document.getElementById("stageTransitionScreen").classList.add("hidden");
+            console.log(`[STAGE MANAGER] User confirmed transition. Current Pending: ${pendingStage}`);
+
+            if (pendingStage >= 1 && pendingStage <= 4) {
+                document.getElementById("gameZone").classList.remove("hidden");
+                document.getElementById("hud").classList.remove("hidden");
+
+                stage = pendingStage;
+                correctCount = 0;
+                consecutiveWrongs = 0;
+                emergencyActive = false;
+                lastSpawnedCategory = null; 
+                lastSpawnedText = null;     
+                document.getElementById("emergencyFlashOverlay").className = "absolute inset-0 pointer-events-none border-[0px] border-rose-600 transition-all duration-300 z-40";
+
+                const basket = document.getElementById("movingBasket");
+                basket.innerText = STAGE_TARGETS[stage];
+                
+                let colorHex = "#fbbf24"; 
+                if (stage === 2) colorHex = "#22d3ee"; 
+                if (stage === 3) colorHex = "#10b981"; 
+                if (stage === 4) colorHex = "#a855f7"; 
+                basket.style.borderColor = colorHex;
+                basket.style.color = colorHex;
+                basket.style.boxShadow = `0 0 15px ${colorHex}66`;
+
+                updateHUDCounters();
+                playSound('levelup');
+
+                basketX = window.innerWidth / 2;
+                updateBasketPosition();
+
+                gameActive = true;
+                isPaused = false;
+                gameTime = 60;
+
+                lastTime = 0; 
+                startGameTimer();
+                requestAnimationFrame(gameEngineFrame);
+                scheduleNextCardSpawn();
+            } else if (pendingStage === 5) {
+                stage = 5;
+                document.getElementById("reviewScreen").classList.remove("hidden");
+                currentReviewIndex = 0;
+                loadReviewQuestion();
+            } else if (pendingStage === 6) {
+                stage = 6;
+                document.getElementById("examScreen").classList.remove("hidden");
+                launchStage6ExamActual();
+            }
+        }
+
+        function startGameSession() {
+            score = 0;
+            combo = 0;
+            maxCombo = 0;
+            stage = 1;
+            correctCount = 0;
+            consecutiveWrongs = 0;
+            gameActive = false; 
+            isPaused = false;
+            gameTime = 60;
+            
+            stage56Total = { S: 0, O: 0, A: 0, P: 0 };
+            stage56Correct = { S: 0, O: 0, A: 0, P: 0 };
+            stage56WrongList = [];
+            stage1to4Wrongs = [];
+            
+            stage3EmergencyTriggered = false;
+            stage4EmergencyCounts = 0;
+            emergencyActive = false;
+            lastSpawnedCategory = null;
+            lastSpawnedText = null;
+
+            document.getElementById("welcomeScreen").classList.add("hidden");
+            showStageAnnouncement(1);
+        }
+
+        function startGameTimer() {
+            if (gameInterval) clearInterval(gameInterval);
+            gameInterval = setInterval(() => {
+                if (!gameActive || isPaused) return;
+
+                if (emergencyActive) {
+                    emergencyTimeLeft--;
+                    if (emergencyTimeLeft <= 0) {
+                        deactivateEmergencyMode();
+                    }
+                }
+            }, 1000);
+        }
+
+        function terminateGameLoop() {
+            gameActive = false;
+            isPaused = false;
+            if (gameInterval) clearInterval(gameInterval);
+            if (cardSpawnTimeout) clearTimeout(cardSpawnTimeout);
+
+            const spawnArea = document.getElementById("cardSpawningArea");
+            if (spawnArea) spawnArea.innerHTML = "";
+            activeCards = [];
+        }
+
+        function togglePauseGame() {
+            if (!gameActive) return;
+            isPaused = !isPaused;
+            const pauseScreen = document.getElementById("pauseScreen");
+            const pauseBtn = document.getElementById("pauseBtn");
+
+            if (isPaused) {
+                pauseScreen.classList.remove("hidden");
+                pauseBtn.innerHTML = `<i class="fa-solid fa-play"></i> <span>재개하기</span>`;
+            } else {
+                pauseScreen.classList.add("hidden");
+                pauseBtn.innerHTML = `<i class="fa-solid fa-pause"></i> <span>일시정지</span>`;
+                lastTime = 0; 
+            }
+        }
+
+        function confirmStopGame() {
+            terminateGameLoop();
+            document.getElementById("pauseScreen").classList.add("hidden");
+            document.getElementById("hud").classList.add("hidden");
+            document.getElementById("gameZone").classList.add("hidden");
+            document.getElementById("welcomeScreen").classList.remove("hidden");
+        }
+
+        function handleKeyDown(e) { keysPressed[e.key] = true; }
+        function handleKeyUp(e) { keysPressed[e.key] = false; }
+        function handleResize() { updateBasketPosition(); }
+
+        function onTouchLeftStart(e) { e.preventDefault(); touchLeftActive = true; }
+        function onTouchLeftEnd(e) { e.preventDefault(); touchLeftActive = false; }
+        function onTouchRightStart(e) { e.preventDefault(); touchRightActive = true; }
+        function onTouchRightEnd(e) { e.preventDefault(); touchRightActive = false; }
+
+        function updateBasketPosition() {
+            const basket = document.getElementById("movingBasket");
+            if (!basket) return;
+            const basketHalfWidth = 24;
+            if (basketX < basketHalfWidth) basketX = basketHalfWidth;
+            if (basketX > window.innerWidth - basketHalfWidth) basketX = window.innerWidth - basketHalfWidth;
+            basket.style.left = `${basketX}px`;
+        }
+
+        function gameEngineFrame(currentTime) {
+            if (!gameActive) return;
+
+            if (!lastTime) lastTime = currentTime;
+            let dt = (currentTime - lastTime) / 16.666; 
+            lastTime = currentTime;
+
+            if (dt > 3.0) dt = 3.0;
+
+            if (!isPaused) {
+                if (keysPressed['ArrowLeft'] || keysPressed['a'] || touchLeftActive) {
+                    basketX -= basketSpeed * dt;
+                }
+                if (keysPressed['ArrowRight'] || keysPressed['d'] || touchRightActive) {
+                    basketX += basketSpeed * dt;
+                }
+                updateBasketPosition();
+
+                const spawnArea = document.getElementById("cardSpawningArea");
+                const basket = document.getElementById("movingBasket");
+                const basketRect = basket.getBoundingClientRect();
+
+                for (let i = activeCards.length - 1; i >= 0; i--) {
+                    const card = activeCards[i];
+                    card.y += card.speed * dt; 
+                    card.element.style.top = `${card.y}px`;
+
+                    const cardRect = card.element.getBoundingClientRect();
+
+                    if (
+                        cardRect.bottom >= basketRect.top &&
+                        cardRect.top <= basketRect.bottom &&
+                        cardRect.right >= basketRect.left &&
+                        cardRect.left <= basketRect.right
+                    ) {
+                        handleCardCatch(card);
+                        card.element.remove();
+                        activeCards.splice(i, 1);
+                    } 
+                    else if (card.y > window.innerHeight) {
+                        handleCardMiss(card);
+                        card.element.remove();
+                        activeCards.splice(i, 1);
+                    }
+                }
+            }
+
+            requestAnimationFrame(gameEngineFrame);
+        }
+
+        function scheduleNextCardSpawn() {
+            if (!gameActive) return;
+            
+            cardSpawnTimeout = setTimeout(() => {
+                if (!isPaused) {
+                    spawnCard();
+                }
+                scheduleNextCardSpawn();
+            }, getSpawnInterval());
+        }
+
+        function spawnCard() {
+            const categories = ['S', 'O', 'A', 'P'];
+            let category;
+            
+            let categoryAttempts = 0;
+            do {
+                category = categories[Math.floor(Math.random() * 4)];
+                categoryAttempts++;
+            } while (category === lastSpawnedCategory && categoryAttempts < 10);
+            
+            lastSpawnedCategory = category;
+
+            const activeTexts = activeCards.map(c => c.data.t);
+
+            let allowed = questions.filter(q => 
+                q.a === category && 
+                q.stages.includes(stage) && 
+                !recentQuestions.includes(q.t) && 
+                !activeTexts.includes(q.t)
+            );
+
+            if (allowed.length === 0) {
+                allowed = questions.filter(q => 
+                    q.a === category && 
+                    q.stages.includes(stage) && 
+                    !activeTexts.includes(q.t)
+                );
+            }
+
+            if (allowed.length === 0) {
+                allowed = questions.filter(q => 
+                    q.a === category && 
+                    q.stages.includes(stage)
+                );
+            }
+
+            if (allowed.length === 0) return;
+
+            const q = allowed[Math.floor(Math.random() * allowed.length)];
+            
+            recentQuestions.push(q.t);
+            if (recentQuestions.length > 5) {
+                recentQuestions.shift();
+            }
+
+            const cardEl = document.createElement("div");
+            cardEl.className = "absolute glass-panel p-2 md:p-3 rounded-xl text-center cursor-pointer pointer-events-auto shadow-2xl select-none transition-shadow w-max max-w-[285px] md:max-w-[340px] h-auto";
+            cardEl.style.border = "1px solid rgba(255, 255, 255, 0.15)";
+            
+            if (q.a === 'S') cardEl.style.borderColor = "rgba(251, 191, 36, 0.4)";
+            else if (q.a === 'O') cardEl.style.borderColor = "rgba(34, 211, 238, 0.4)";
+            else if (q.a === 'A') cardEl.style.borderColor = "rgba(16, 185, 129, 0.4)";
+            else if (q.a === 'P') cardEl.style.borderColor = "rgba(168, 85, 247, 0.4)";
+
+            cardEl.innerHTML = `
+                <div class="text-[17px] md:text-[21px] font-bold tracking-tight text-white leading-tight" style="word-break: keep-all;">
+                    ${q.t}
+                </div>
+            `;
+
+            const estWidth = Math.min(340, Math.max(160, q.t.length * 11 + 30));
+            const xMax = window.innerWidth - (estWidth + 30);
+            const xPos = Math.max(20, Math.floor(Math.random() * xMax));
+            cardEl.style.left = `${xPos}px`;
+            cardEl.style.top = `-120px`;
+
+            document.getElementById("cardSpawningArea").appendChild(cardEl);
+
+            activeCards.push({
+                element: cardEl,
+                x: xPos,
+                y: -120,
+                speed: getBaseSpeed(),
+                data: q
+            });
+        }
+
+        function handleCardCatch(card) {
+            const targetType = STAGE_TARGETS[stage];
+
+            if (card.data.a === targetType) {
+                const baseReward = emergencyActive ? 20 : 10;
+                score += baseReward;
+                combo++;
+                correctCount++;
+                consecutiveWrongs = 0;
+                playSound('correct');
+
+                if (combo > maxCombo) maxCombo = combo;
+
+                const goal = STAGE_GOALS[stage];
+                if (correctCount >= goal) {
+                    terminateGameLoop();
+                    const nextStg = stage + 1;
+                    showToastAlert(`🎉 Stage ${stage} 완료!`);
+                    setTimeout(() => { 
+                        if (nextStg === 5) {
+                            launchReviewAuditPhase();
+                        } else {
+                            transitionToStage(nextStg); 
+                        }
+                    }, 1200);
+                } else {
+                    checkEmergencyTriggers();
+                }
+            } else {
+                score = Math.max(0, score - 5);
+                combo = 0;
+                consecutiveWrongs++;
+                stage1to4Wrongs.push(card.data); 
+                playSound('wrong');
+
+                if (consecutiveWrongs >= 3) {
+                    resetCurrentStageProgress();
+                }
+            }
+
+            updateHUDCounters();
+        }
+
+        function handleCardMiss(card) {
+            const targetType = STAGE_TARGETS[stage];
+            
+            if (card.data.a === targetType) {
+                score = Math.max(0, score - 3);
+                combo = 0;
+                consecutiveWrongs++;
+                stage1to4Wrongs.push(card.data); 
+                playSound('wrong');
+
+                if (consecutiveWrongs >= 3) {
+                    resetCurrentStageProgress();
+                }
+                updateHUDCounters();
+            }
+        }
+
+        function resetCurrentStageProgress() {
+            isPaused = true;
+            playSound('reset');
+            document.getElementById("consecutiveWrongsModal").classList.remove("hidden");
+        }
+
+        function dismissConsecutiveWrongsModal() {
+            document.getElementById("consecutiveWrongsModal").classList.add("hidden");
+            correctCount = 0;
+            consecutiveWrongs = 0;
+            isPaused = false;
+            
+            const spawnArea = document.getElementById("cardSpawningArea");
+            if (spawnArea) spawnArea.innerHTML = "";
+            activeCards = [];
+            
+            updateHUDCounters();
+            showToastAlert("현재 단계의 진행률이 초기화되었습니다. 처음부터 다시 시작합니다!");
+        }
+
+        function checkEmergencyTriggers() {
+            if (stage === 3 && correctCount === 5 && !stage3EmergencyTriggered) {
+                stage3EmergencyTriggered = true;
+                activateEmergencyMode();
+            } else if (stage === 4) {
+                if ((correctCount === 3 || correctCount === 7) && stage4EmergencyCounts < 2) {
+                    stage4EmergencyCounts++;
+                    activateEmergencyMode();
+                }
+            }
+        }
+
+        function activateEmergencyMode() {
+            emergencyActive = true;
+            emergencyTimeLeft = 15;
+            playSound('emergency');
+            showToastAlert("⚠️ 15초 긴급 응급 상황! 카드 낙하 속도 증가 및 정답 점수 2배 획득!");
+            document.getElementById("emergencyFlashOverlay").className = "absolute inset-0 pointer-events-none border-[12px] border-rose-600 transition-all duration-300 z-40 emergency-active";
+        }
+
+        function deactivateEmergencyMode() {
+            emergencyActive = false;
+            showToastAlert("ℹ️ 응급 상황이 해제되었습니다. 표준 진행 속도로 복구합니다.");
+            document.getElementById("emergencyFlashOverlay").className = "absolute inset-0 pointer-events-none border-[0px] border-rose-600 transition-all duration-300 z-40";
+        }
+
+        let currentReviewIndex = 0;
+        let uniqueWrongs = [];
+
+        function launchReviewAuditPhase() {
+            terminateGameLoop();
+            document.getElementById("gameZone").classList.add("hidden");
+            document.getElementById("hud").classList.add("hidden");
+
+            const uniqueQuestionsMap = new Map();
+            stage1to4Wrongs.forEach(q => {
+                uniqueQuestionsMap.set(q.t, q);
+            });
+            uniqueWrongs = Array.from(uniqueQuestionsMap.values());
+
+            if (uniqueWrongs.length === 0) {
+                const sList = shuffleArray(questions.filter(q => q.a === 'S')).slice(0, 1);
+                const oList = shuffleArray(questions.filter(q => q.a === 'O')).slice(0, 1);
+                const aList = shuffleArray(questions.filter(q => q.a === 'A')).slice(0, 1);
+                const pList = shuffleArray(questions.filter(q => q.a === 'P')).slice(0, 1);
+                uniqueWrongs = [...sList, ...oList, ...aList, ...pList];
+            }
+
+            showStageAnnouncement(5);
+        }
+
+        function loadReviewQuestion() {
+            const q = uniqueWrongs[currentReviewIndex];
+            document.getElementById("reviewProgress").innerText = `${currentReviewIndex + 1} / ${uniqueWrongs.length}`;
+            document.getElementById("reviewQuestionText").innerText = q.t;
+            document.getElementById("reviewExplanationArea").classList.add("hidden");
+        }
+
+        function submitReviewAnswer(ans) {
+            const q = uniqueWrongs[currentReviewIndex];
+            const expArea = document.getElementById("reviewExplanationArea");
+            const expText = document.getElementById("reviewExplanationText");
+
+            stage56Total[q.a]++;
+
+            if (q.a === ans) {
+                stage56Correct[q.a]++;
+                playSound('correct');
+                showToastAlert("정답입니다! 이수가 승인됩니다.");
+                
+                currentReviewIndex++;
+                if (currentReviewIndex < uniqueWrongs.length) {
+                    setTimeout(() => { loadReviewQuestion(); }, 600);
+                } else {
+                    setTimeout(() => {
+                        document.getElementById("reviewScreen").classList.add("hidden");
+                        showStageAnnouncement(6);
+                    }, 800);
+                }
+            } else {
+                stage56WrongList.push({ q: q, myAns: ans });
+                playSound('wrong');
+                showToastAlert("오답입니다. 해설을 읽어보고 다시 맞춰보세요.");
+                expText.innerText = q.exp;
+                expArea.classList.remove("hidden");
+            }
+        }
+
+        let currentExamIndex = 0;
+        let examQuestionsList = [];
+        const EXAM_GOAL_COUNT = 12; 
+
+        function generateNonConsecutiveQuizList(items) {
+            let list = [...items];
+            let attempts = 0;
+            while (attempts < 1000) {
+                list = shuffleArray(list);
+                let valid = true;
+                for (let i = 0; i < list.length - 1; i++) {
+                    if (list[i].a === list[i+1].a) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) {
+                    return list;
+                }
+                attempts++;
+            }
+            return items; 
+        }
+
+        function launchStage6ExamActual() {
+            currentExamIndex = 0;
+            
+            const sList = shuffleArray(questions.filter(q => q.a === 'S')).slice(0, 3);
+            const oList = shuffleArray(questions.filter(q => q.a === 'O')).slice(0, 3);
+            const aList = shuffleArray(questions.filter(q => q.a === 'A')).slice(0, 3);
+            const pList = shuffleArray(questions.filter(q => q.a === 'P')).slice(0, 3);
+
+            examQuestionsList = generateNonConsecutiveQuizList([...sList, ...oList, ...aList, ...pList]);
+            loadExamQuestion();
+        }
+
+        function shuffleArray(arr) {
+            return arr.map(a => ({ sort: Math.random(), value: a }))
+                      .sort((a, b) => a.sort - b.sort)
+                      .map(a => a.value);
+        }
+
+        function loadExamQuestion() {
+            const q = examQuestionsList[currentExamIndex];
+            document.getElementById("examProgressText").innerText = `${currentExamIndex + 1} / ${EXAM_GOAL_COUNT}`;
+            document.getElementById("examQuestionText").innerText = q.t;
+            document.getElementById("examFeedbackArea").classList.add("hidden");
+        }
+
+        let isExamFeedbackWaiting = false;
+
+        function submitExamAnswer(ans) {
+            if (isExamFeedbackWaiting) return;
+
+            const q = examQuestionsList[currentExamIndex];
+            
+            stage56Total[q.a]++;
+
+            const isCorrect = q.a === ans;
+            const badge = document.getElementById("examResultBadge");
+            const feedbackText = document.getElementById("examFeedbackText");
+
+            if (isCorrect) {
+                stage56Correct[q.a]++;
+                playSound('correct');
+                score += 30; 
+                badge.innerText = "정답";
+                badge.className = "px-2.5 py-0.5 rounded text-xs font-bold uppercase bg-emerald-950 text-emerald-400 border border-emerald-500/30";
+            } else {
+                stage56WrongList.push({ q: q, myAns: ans });
+                playSound('wrong');
+                badge.innerText = "오답";
+                badge.className = "px-2.5 py-0.5 rounded text-xs font-bold uppercase bg-rose-950 text-rose-400 border border-rose-500/30";
+            }
+
+            feedbackText.innerHTML = `선택하신 답: <strong>${ans}</strong> | 정답: <strong>${q.a}</strong><br><span class="text-slate-400">${q.exp}</span>`;
+            document.getElementById("examFeedbackArea").classList.remove("hidden");
+            isExamFeedbackWaiting = true;
+        }
+
+        function proceedToNextExamQuestion() {
+            isExamFeedbackWaiting = false;
+            currentExamIndex++;
+            if (currentExamIndex < EXAM_GOAL_COUNT) {
+                loadExamQuestion();
+            } else {
+                setTimeout(() => {
+                    document.getElementById("examScreen").classList.add("hidden");
+                    saveProgressAndCompile();
+                }, 800);
+            }
+        }
+
+        function saveProgressAndCompile() {
+            if (currentUser) {
+                currentUser.attempts = (currentUser.attempts || 0) + 1;
+                
+                const now = new Date();
+                const dateStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`;
+                
+                if (score > (currentUser.highScore || 0) || !currentUser.certData) {
+                    currentUser.highScore = score;
+                    currentUser.certData = {
+                        score: score,
+                        maxCombo: maxCombo,
+                        stage56Total: stage56Total,
+                        stage56Correct: stage56Correct,
+                        stage56WrongList: stage56WrongList,
+                        date: dateStr
+                    };
+                }
+                
+                localStorage.setItem(`soap_usr_${currentUser.id}`, JSON.stringify(currentUser));
+            }
+            compileFinalCertificate();
+        }
+
+        function compileFinalCertificate() {
+            document.getElementById("resultScreen").classList.remove("hidden");
+
+            document.getElementById("certName").innerText = currentUser.name;
+            document.getElementById("certUserId").innerText = currentUser.id;
+            
+            if (currentUser.certData && currentUser.certData.date) {
+                document.getElementById("certDate").innerText = currentUser.certData.date;
+            } else {
+                const now = new Date();
+                document.getElementById("certDate").innerText = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`;
+            }
+
+            let total56Spawns = 0;
+            let total56Corrects = 0;
+            ['S', 'O', 'A', 'P'].forEach(cat => {
+                total56Spawns += stage56Total[cat];
+                total56Corrects += stage56Correct[cat];
+            });
+
+            const accuracy = total56Spawns > 0 ? Math.round((total56Corrects / total56Spawns) * 100) : 100;
+            
+            let grade = "재도전";
+            let gradeColor = "text-rose-600";
+            if (accuracy >= 90) {
+                grade = "🏆 SOAP 마스터";
+                gradeColor = "text-emerald-600";
+            } else if (accuracy >= 80) {
+                grade = "🥇 우수 기록자";
+                gradeColor = "text-cyan-600";
+            } else if (accuracy >= 70) {
+                grade = "🥈 SOAP 수습";
+                gradeColor = "text-amber-500";
+            } else {
+                grade = "📚 재도전";
+                gradeColor = "text-rose-500 font-bold";
+            }
+
+            document.getElementById("certScore").innerText = score;
+            document.getElementById("certAccuracy").innerText = `${accuracy}%`;
+            
+            const gradeEl = document.getElementById("certGrade");
+            gradeEl.innerText = grade;
+            gradeEl.className = `text-xs md:text-sm font-black ${gradeColor}`;
+
+            document.getElementById("certCombo").innerText = maxCombo;
+
+            document.getElementById("certHighScore").innerText = currentUser.highScore || score;
+            document.getElementById("certAttempts").innerText = `${currentUser.attempts || 1}회`;
+
+            document.getElementById("tblScorS").innerText = stage56Correct['S'];
+            document.getElementById("tblScorO").innerText = stage56Correct['O'];
+            document.getElementById("tblScorA").innerText = stage56Correct['A'];
+            document.getElementById("tblScorP").innerText = stage56Correct['P'];
+
+            const failS = stage56Total['S'] - stage56Correct['S'];
+            const failO = stage56Total['O'] - stage56Correct['O'];
+            const failA = stage56Total['A'] - stage56Correct['A'];
+            const failP = stage56Total['P'] - stage56Correct['P'];
+
+            document.getElementById("tblFailS").innerText = failS;
+            document.getElementById("tblFailO").innerText = failO;
+            document.getElementById("tblFailA").innerText = failA;
+            document.getElementById("tblFailP").innerText = failP;
+
+            document.getElementById("tblRatioS").innerText = `${failS}/${stage56Total['S'] || 0}`;
+            document.getElementById("tblRatioO").innerText = `${failO}/${stage56Total['O'] || 0}`;
+            document.getElementById("tblRatioA").innerText = `${failA}/${stage56Total['A'] || 0}`;
+            document.getElementById("tblRatioP").innerText = `${failP}/${stage56Total['P'] || 0}`;
+
+            const listContainer = document.getElementById("certWrongList");
+            listContainer.innerHTML = "";
+            const displayWrongs = stage56WrongList.slice(0, 5);
+
+            if (displayWrongs.length === 0) {
+                listContainer.innerHTML = `<div class="text-center text-emerald-600 font-bold py-2">🎉 완벽한 진단 분류 성공! 오답 기록이 없습니다.</div>`;
+            } else {
+                displayWrongs.forEach(item => {
+                    const row = document.createElement("div");
+                    row.className = "p-2 bg-slate-50 rounded border border-slate-100 flex flex-col gap-0.5";
+                    row.innerHTML = `
+                        <div class="flex items-center justify-between text-slate-800 font-bold">
+                            <span>“${item.q.t}”</span>
+                            <span class="text-rose-500">${item.myAns} 입력 ❌ (정답: ${item.q.a})</span>
+                        </div>
+                        <p class="text-slate-400 text-[9px]">${item.q.exp}</p>
+                    `;
+                    listContainer.appendChild(row);
+                });
+            }
+
+            analyzeCognitivePatterns();
+
+            const hash = `SOAP-C-${currentUser.id.toUpperCase()}-${score}-${accuracy}`;
+            document.getElementById("certHashCode").innerText = hash;
+        }
+
+        function analyzeCognitivePatterns() {
+            let feedback = "";
+            const totalS = stage56Total['S'] || 0;
+            const correctS = stage56Correct['S'] || 0;
+            const accuracyS = totalS > 0 ? (correctS / totalS) : 1;
+
+            const totalO = stage56Total['O'] || 0;
+            const correctO = stage56Correct['O'] || 0;
+            const accuracyO = totalO > 0 ? (correctO / totalO) : 1;
+
+            const totalA = stage56Total['A'] || 0;
+            const correctA = stage56Correct['A'] || 0;
+            const accuracyA = totalA > 0 ? (correctA / totalA) : 1;
+
+            const totalP = stage56Total['P'] || 0;
+            const correctP = stage56Correct['P'] || 0;
+            const accuracyP = totalP > 0 ? (correctP / totalP) : 1;
+
+            let weakSpots = [];
+            if (accuracyS < 0.85) weakSpots.push("S(주관적) 자료 분류의 세밀한 구분 훈련이 필요합니다.");
+            if (accuracyO < 0.85) weakSpots.push("O(객관적) 장비 수치 데이터를 단순 느낌(S)과 더 철저히 격리해 반복 학습하십시오.");
+            if (accuracyA < 0.85) weakSpots.push("A(사정/진단) 영역의 오답이 감지되었습니다. 치료 계획과의 경계를 명확히 세워야 합니다.");
+            if (accuracyP < 0.85) weakSpots.push("P(수행계획) 계획 처방과 판단 소견을 묶어 보는 오류에 유의하십시오.");
+
+            if (weakSpots.length === 0) {
+                feedback = "모든 영역의 분류 정답률이 대단히 균형적이고 훌륭합니다! 탁월한 임상 의무기록 분류 능력(SOAP 마스터 자격)을 인정합니다.";
+            } else {
+                feedback = weakSpots.join(" ") + " 특히, 오답률 분석 결과를 보강하여 '마스터' 등급 취득을 목표로 하십시오.";
+            }
+
+            document.getElementById("certFeedbackText").innerText = feedback;
+        }
+
+        function returnToLobby() {
+            document.getElementById("resultScreen").classList.add("hidden");
+            document.getElementById("welcomeScreen").classList.remove("hidden");
+            showWelcomeLobby();
+        }
+
+        function drawPage1(totalPages) {
+            const canvas = document.createElement("canvas");
+            canvas.width = 800;
+            canvas.height = 1100;
+            const ctx = canvas.getContext("2d");
+
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = "#0e7490";
+            ctx.lineWidth = 6;
+            ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30);
+            ctx.strokeStyle = "#0e7490";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(25, 25, canvas.width - 50, canvas.height - 50);
+
+            ctx.fillStyle = "#0e7490";
+            ctx.font = "bold 15px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("CLINICAL SOAP COMPETENCY LICENSE", canvas.width / 2, 75);
+
+            ctx.fillStyle = "#1e293b";
+            ctx.font = "900 36px sans-serif";
+            ctx.fillText("임 상  이 수 증 명 서", canvas.width / 2, 125);
+
+            ctx.strokeStyle = "#0891b2";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2 - 80, 145);
+            ctx.lineTo(canvas.width / 2 + 80, 145);
+            ctx.stroke();
+
+            ctx.textAlign = "left";
+            ctx.fillStyle = "#475569";
+            ctx.font = "bold 13px monospace";
+            ctx.fillText("NAME (이름):", 60, 200);
+            ctx.fillText("NICKNAME (별명):", 60, 230);
+            ctx.fillText("DATE (응시일):", 60, 260);
+
+            const userName = currentUser ? currentUser.name : "학습자";
+            const userId = currentUser ? currentUser.id : "ID";
+
+            ctx.fillStyle = "#0f172a";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText(userName, 190, 200);
+            ctx.fillText(userId, 190, 230);
+            ctx.fillText(document.getElementById("certDate").innerText, 190, 260);
+
+            ctx.fillStyle = "#f8fafc";
+            ctx.fillRect(60, 285, 680, 80);
+            ctx.strokeStyle = "#e2e8f0";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(60, 285, 680, 80);
+
+            let total56Spawns = 0;
+            let total56Corrects = 0;
+            ['S', 'O', 'A', 'P'].forEach(cat => {
+                total56Spawns += stage56Total[cat];
+                total56Corrects += stage56Correct[cat];
+            });
+            const accuracy = total56Spawns > 0 ? Math.round((total56Corrects / total56Spawns) * 100) : 100;
+
+            const scoresArr = [
+                { l: "SCORE", v: score },
+                { l: "ACCURACY", v: `${accuracy}%` },
+                { l: "GRADE", v: document.getElementById("certGrade").innerText },
+                { l: "MAX COMBO", v: maxCombo }
+            ];
+
+            ctx.textAlign = "center";
+            scoresArr.forEach((item, idx) => {
+                const startX = 60 + 85 + (idx * 170);
+                ctx.fillStyle = "#94a3b8";
+                ctx.font = "bold 11px sans-serif";
+                ctx.fillText(item.l, startX, 315);
+
+                ctx.fillStyle = (idx === 2) ? "#059669" : "#0f172a";
+                ctx.font = "bold 18px sans-serif";
+                ctx.fillText(item.v, startX, 345);
+            });
+
+            ctx.fillStyle = "#ecfeff";
+            ctx.fillRect(60, 380, 680, 50);
+            ctx.strokeStyle = "#cffafe";
+            ctx.strokeRect(60, 380, 680, 50);
+
+            ctx.textAlign = "left";
+            ctx.fillStyle = "#0891b2";
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillText(`PERSONAL HIGH RECORD: ${currentUser ? (currentUser.highScore || score) : score}`, 90, 410);
+            ctx.textAlign = "right";
+            ctx.fillText(`TOTAL COMPLETED ATTEMPTS: ${currentUser ? (currentUser.attempts || 1) : 1}회`, 710, 410);
+
+            ctx.textAlign = "left";
+            ctx.fillStyle = "#64748b";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText("✔ ① SOAP 영역별 평가 성적 (5단계+6단계 결과)", 60, 465);
+
+            ctx.fillStyle = "#f1f5f9";
+            ctx.fillRect(60, 485, 680, 30);
+            ctx.fillStyle = "#f8fafc";
+            ctx.fillRect(60, 515, 680, 90);
+
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "#cbd5e1";
+            ctx.strokeRect(60, 485, 680, 120);
+
+            const tableCols = ["영역", "S (주관적)", "O (객관적)", "A (사정)", "P (계획)"];
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillStyle = "#475569";
+            tableCols.forEach((col, idx) => {
+                ctx.fillText(col, 80 + (idx * 130), 505);
+            });
+
+            ctx.fillStyle = "#334155";
+            ctx.fillText("맞은 개수", 80, 540);
+            ctx.fillText("틀린 개수", 80, 570);
+            ctx.fillText("틀린 비율", 80, 595);
+
+            const failS = stage56Total['S'] - stage56Correct['S'];
+            const failO = stage56Total['O'] - stage56Correct['O'];
+            const failA = stage56Total['A'] - stage56Correct['A'];
+            const failP = stage56Total['P'] - stage56Correct['P'];
+
+            const matchVals = [stage56Correct['S'], stage56Correct['O'], stage56Correct['A'], stage56Correct['P']];
+            const failVals = [failS, failO, failA, failP];
+            const ratioVals = [
+                `${failS}/${stage56Total['S'] || 0}`,
+                `${failO}/${stage56Total['O'] || 0}`,
+                `${failA}/${stage56Total['A'] || 0}`,
+                `${failP}/${stage56Total['P'] || 0}`
+            ];
+
+            ctx.font = "bold 13px sans-serif";
+            matchVals.forEach((val, idx) => {
+                ctx.fillStyle = "#059669";
+                ctx.fillText(val, 80 + ((idx + 1) * 130), 540);
+            });
+            failVals.forEach((val, idx) => {
+                ctx.fillStyle = "#e11d48";
+                ctx.fillText(val, 80 + ((idx + 1) * 130), 570);
+            });
+            ratioVals.forEach((val, idx) => {
+                ctx.fillStyle = "#ef4444";
+                ctx.fillText(val, 80 + ((idx + 1) * 130), 595);
+            });
+
+            ctx.fillStyle = "#64748b";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText("✔ ② 인지적 분석 패턴 피드백 & 재학습 권장", 60, 635);
+
+            ctx.fillStyle = "#f8fafc";
+            ctx.fillRect(60, 650, 680, 75);
+            ctx.strokeStyle = "#cbd5e1";
+            ctx.strokeRect(60, 650, 680, 75);
+
+            ctx.fillStyle = "#334155";
+            ctx.font = "italic 11px sans-serif";
+            
+            const text = document.getElementById("certFeedbackText").innerText;
+            const words = text.split(' ');
+            let line = '';
+            let lineY = 675;
+            for(let n = 0; n < words.length; n++) {
+                let testLine = line + words[n] + ' ';
+                let metrics = ctx.measureText(testLine);
+                if (metrics.width > 640 && n > 0) {
+                    ctx.fillText(line, 80, lineY);
+                    line = words[n] + ' ';
+                    lineY += 18;
+                } else {
+                    line = testLine;
+                }
+            }
+            ctx.fillText(line, 80, lineY);
+
+            ctx.fillStyle = "#f0fdf4";
+            ctx.fillRect(60, 745, 680, 50);
+            ctx.strokeStyle = "#bbf7d0";
+            ctx.strokeRect(60, 745, 680, 50);
+
+            ctx.textAlign = "center";
+            ctx.fillStyle = "#15803d";
+            ctx.font = "bold 12px sans-serif";
+            if (totalPages > 1) {
+                ctx.fillText(`※ 상세 오답 분석 리포트(${totalPages - 1}개 페이지)가 함께 발행되었습니다.`, canvas.width / 2, 775);
+            } else {
+                ctx.fillText("🎉 모든 분류 진단을 완벽하게 통과하여 상세 오답 리포트가 첨부되지 않았습니다.", canvas.width / 2, 775);
+            }
+
+            ctx.textAlign = "left";
+            ctx.fillStyle = "#94a3b8";
+            ctx.font = "9px monospace";
+            ctx.fillText(`CERTIFICATION CODE: ${document.getElementById("certHashCode").innerText}`, 60, 835);
+            ctx.fillText("본 문서는 SOAP Catcher Clinical Suite 학술 교육 위원회 보증 이수증입니다.", 60, 850);
+
+            ctx.textAlign = "right";
+            ctx.fillStyle = "#0f172a";
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillText("SOAP Catcher 학술 교육 위원회 [직인]", 740, 835);
+
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(700, 865, 24, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            ctx.fillStyle = "#ef4444";
+            ctx.font = "bold 10px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("이수", 700, 861);
+            ctx.fillText("완료", 700, 873);
+
+            ctx.fillStyle = "#64748b";
+            ctx.font = "bold 12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(`1 / ${totalPages} 페이지`, canvas.width / 2, 1050);
+
+            return canvas;
+        }
+
+        function drawReportPage(pageIndex, wrongItemsChunk, totalPages) {
+            const canvas = document.createElement("canvas");
+            canvas.width = 800;
+            canvas.height = 1100;
+            const ctx = canvas.getContext("2d");
+
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = "#0e7490";
+            ctx.lineWidth = 6;
+            ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30);
+            ctx.strokeStyle = "#0e7490";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(25, 25, canvas.width - 50, canvas.height - 50);
+
+            ctx.fillStyle = "#0e7490";
+            ctx.font = "bold 14px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("CLINICAL SOAP COMPETENCY LICENSE - ERROR REPORT", canvas.width / 2, 75);
+
+            ctx.fillStyle = "#1e293b";
+            ctx.font = "bold 26px sans-serif";
+            ctx.fillText("상세 임상 오답 분석 리포트", canvas.width / 2, 120);
+
+            ctx.strokeStyle = "#cbd5e1";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(50, 145);
+            ctx.lineTo(750, 145);
+            ctx.stroke();
+
+            ctx.textAlign = "left";
+            ctx.fillStyle = "#475569";
+            ctx.font = "bold 11px sans-serif";
+            
+            const userName = currentUser ? currentUser.name : "학습자";
+            const userId = currentUser ? currentUser.id : "ID";
+
+            ctx.fillText(`학습자: ${userName} (${userId})`, 60, 170);
+            ctx.textAlign = "right";
+            ctx.fillText(`발행일: ${document.getElementById("certDate").innerText}`, 740, 170);
+
+            wrongItemsChunk.forEach((err, idx) => {
+                const py = 195 + (idx * 133);
+
+                ctx.fillStyle = "#f8fafc";
+                ctx.fillRect(60, py, 680, 115);
+                ctx.strokeStyle = "#e2e8f0";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(60, py, 680, 115);
+
+                ctx.fillStyle = "#0e7490";
+                ctx.font = "bold 11px sans-serif";
+                ctx.textAlign = "left";
+                ctx.fillText(`문항 ${pageIndex * 6 + idx + 1}`, 75, py + 25);
+
+                ctx.fillStyle = "#0f172a";
+                ctx.font = "bold 13px sans-serif";
+                ctx.fillText(`“ ${err.q.t} ”`, 130, py + 25);
+
+                ctx.fillStyle = "#e11d48";
+                ctx.font = "bold 11px sans-serif";
+                ctx.textAlign = "right";
+                ctx.fillText(`선택 오답: ${err.myAns} (정답: ${err.q.a}) ❌`, 720, py + 25);
+
+                ctx.strokeStyle = "#f1f5f9";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(70, py + 40);
+                ctx.lineTo(730, py + 40);
+                ctx.stroke();
+
+                ctx.textAlign = "left";
+                ctx.fillStyle = "#475569";
+                ctx.font = "11px sans-serif";
+                
+                const expContent = `해설: ${err.q.exp}`;
+                const expWords = expContent.split(' ');
+                let explLine = '';
+                let explY = py + 60;
+                for(let n = 0; n < expWords.length; n++) {
+                    let testExpl = explLine + expWords[n] + ' ';
+                    let explMetrics = ctx.measureText(testExpl);
+                    if (explMetrics.width > 630 && n > 0) {
+                        ctx.fillText(explLine, 75, explY);
+                        explLine = expWords[n] + ' ';
+                        explY += 16;
+                    } else {
+                        explLine = testExpl;
+                    }
+                }
+                ctx.fillText(explLine, 75, explY);
+            });
+
+            ctx.fillStyle = "#64748b";
+            ctx.font = "bold 12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(`${pageIndex + 2} / ${totalPages} 페이지`, canvas.width / 2, 1050);
+
+            return canvas;
+        }
+
+        function logPdfProgress(msg, type = "info") {
+            console.log(`[PDF ENGINE] ${msg}`);
+            showToastAlert(`[PDF] ${msg}`);
+        }
+
+        function downloadAsImage() {
+            logPdfProgress("이미지 변환을 시작합니다...");
+            try {
+                const totalWrongCount = stage56WrongList.length;
+                const itemsPerPage = 6;
+                const totalPages = 1 + Math.ceil(totalWrongCount / itemsPerPage);
+
+                const canvas = drawPage1(totalPages);
+                const dataURL = canvas.toDataURL("image/png");
+                
+                const imgEl = document.getElementById("fallbackImageElement");
+                imgEl.src = dataURL;
+                
+                document.getElementById("imageFallbackModal").classList.remove("hidden");
+                logPdfProgress("이미지 변환 완료! 이수증을 꾹 눌러 저장해 주세요.");
+            } catch (err) {
+                console.error(err);
+                showToastAlert("이미지 생성 중 오류가 발생했습니다.");
+            }
+        }
+
+        function closeImageFallbackModal() {
+            document.getElementById("imageFallbackModal").classList.add("hidden");
+        }
+
+        function downloadCertificate(action = 'save') {
+            const userName = currentUser ? currentUser.name : "학습자";
+            console.log("[PDF ENGINE] downloadCertificate initiated with action:", action);
+            
+            // 카카오톡 내에서 실행 중이고 PDF 저장을 원할 경우, 사전에 이미지 백업 시스템으로 강제 가이드 분기
+            if (isKakaoTalk() && action === 'save') {
+                showAuthAlert(
+                    "카카오톡 저장 제한 안내", 
+                    "카카오톡 인앱 브라우저 정책상 파일 직접 다운로드가 차단됩니다. 이미지(PNG) 저장 기능을 이용하여 갤러리에 저장하시거나, 우측 상단 메뉴(···)를 눌러 외부 브라우저(Chrome/Safari)로 열어 다운로드해 주십시오.", 
+                    "warning", 
+                    () => { downloadAsImage(); }
+                );
+                return;
+            }
+
+            const { jsPDF } = window.jspdf || {};
+            if (!jsPDF) {
+                logPdfProgress("오류: jsPDF 라이브러리가 로드되지 않았습니다.", "error");
+                return;
+            }
+
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const usePreviewWindow = (action === 'view' || isMobile);
+            
+            let previewWindow = null;
+            if (usePreviewWindow) {
+                logPdfProgress("팝업 차단 방지를 위해 새 창을 먼저 엽니다.");
+                
+                previewWindow = window.open("", "_blank");
+                if (!previewWindow) {
+                    logPdfProgress("경고: 브라우저의 팝업 차단이 감지되었습니다. 상단 주소창 근처의 팝업 허용 설정을 활성화해주세요.", "error");
+                    return;
+                }
+                
+                previewWindow.document.open();
+                previewWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html lang="ko">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>이수증 PDF 생성 중...</title>
+                        <style>
+                            body {
+                                background: #0b1528;
+                                color: #cbd5e1;
+                                font-family: sans-serif;
+                                display: flex;
+                                flex-direction: column;
+                                justify-content: center;
+                                align-items: center;
+                                height: 100vh;
+                                margin: 0;
+                                text-align: center;
+                                padding: 20px;
+                            }
+                            .loader {
+                                border: 4px solid #1e293b;
+                                border-top: 4px solid #06b6d4;
+                                border-radius: 50%;
+                                width: 50px;
+                                height: 50px;
+                                animation: spin 1s linear infinite;
+                                margin-bottom: 20px;
+                            }
+                            @keyframes spin {
+                                0% { transform: rotate(0deg); }
+                                100% { transform: rotate(360deg); }
+                            }
+                            h2 { color: #ffffff; margin-bottom: 8px; }
+                            p { color: #94a3b8; font-size: 14px; margin-top: 0; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="loader"></div>
+                        <h2>PDF 수료증 생성 중</h2>
+                        <p>고해상도 이수 데이터 인쇄 및 오답 리포트를 준비하고 있습니다.</p>
+                        <p style="font-size: 12px; color: #64748b;">(브라우저를 닫지 마세요)</p>
+                    </body>
+                    </html>
+                `);
+                previewWindow.document.close();
+            }
+
+            setTimeout(() => {
+                try {
+                    logPdfProgress("PDF 생성 시작");
+                    
+                    const pdf = new jsPDF({
+                        orientation: 'portrait',
+                        unit: 'px',
+                        format: [800, 1100]
+                    });
+                    logPdfProgress("jsPDF 인스턴스 초기화 완료");
+
+                    const totalWrongCount = stage56WrongList.length;
+                    const itemsPerPage = 6;
+                    const totalPages = 1 + Math.ceil(totalWrongCount / itemsPerPage);
+                    logPdfProgress(`총 페이지 수 산출 완료: ${totalPages}페이지 (오답 수: ${totalWrongCount}개)`);
+
+                    logPdfProgress("이수증 1페이지 렌더링 중...");
+                    const page1Canvas = drawPage1(totalPages);
+                    if (!page1Canvas) throw new Error("1페이지 캔버스 생성 실패");
+                    
+                    logPdfProgress("1페이지 데이터 압축 중...");
+                    const imgData1 = page1Canvas.toDataURL("image/jpeg", 0.95);
+                    pdf.addImage(imgData1, 'JPEG', 0, 0, 800, 1100);
+                    logPdfProgress("1페이지 PDF 추가 완료");
+
+                    for (let i = 0; i < Math.ceil(totalWrongCount / itemsPerPage); i++) {
+                        logPdfProgress(`오답 리포트 ${i + 2}페이지 렌더링 중...`);
+                        pdf.addPage([800, 1100]);
+                        const chunk = stage56WrongList.slice(i * itemsPerPage, (i + 1) * itemsPerPage);
+                        const reportCanvas = drawReportPage(i, chunk, totalPages);
+                        if (!reportCanvas) throw new Error(`${i + 2}페이지 캔버스 생성 실패`);
+                        
+                        const imgDataR = reportCanvas.toDataURL("image/jpeg", 0.95);
+                        pdf.addImage(imgDataR, 'JPEG', 0, 0, 800, 1100);
+                        logPdfProgress(`이수증 ${i + 2}페이지 PDF 추가 완료`);
+                    }
+
+                    logPdfProgress("PDF 생성 완료");
+
+                    logPdfProgress("Blob 바이너리 변환 진행...");
+                    const blob = pdf.output('blob');
+                    if (!blob || blob.size === 0) {
+                        throw new Error("생성된 Blob 데이터가 빈 값입니다.");
+                    }
+                    logPdfProgress(`Blob 생성 성공 (크기: ${Math.round(blob.size / 1024)} KB)`);
+
+                    const blobURL = URL.createObjectURL(blob);
+                    if (!blobURL) {
+                        throw new Error("URL.createObjectURL() 결과가 유효하지 않습니다.");
+                    }
+                    logPdfProgress("Object URL 생성 성공");
+
+                    if (usePreviewWindow && previewWindow) {
+                        logPdfProgress("새 창에 PDF 이수증 표시 중...");
+                        
+                        previewWindow.document.open();
+                        previewWindow.document.write(`
+                            <!DOCTYPE html>
+                            <html lang="ko">
+                            <head>
+                                <meta charset="UTF-8">
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                <title>임상수련 이수증명서 미리보기</title>
+                                <style>
+                                    body {
+                                        margin: 0;
+                                        background: #0f172a;
+                                        color: #f1f5f9;
+                                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                                        display: flex;
+                                        flex-direction: column;
+                                        height: 100vh;
+                                        overflow: hidden;
+                                    }
+                                    header {
+                                        background: #1e293b;
+                                        padding: 12px 20px;
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                        border-bottom: 1px solid #334155;
+                                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                                    }
+                                    h1 {
+                                        font-size: 16px;
+                                        margin: 0;
+                                        font-weight: 700;
+                                        color: #38bdf8;
+                                    }
+                                    .btn {
+                                        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+                                        color: white;
+                                        border: none;
+                                        padding: 8px 16px;
+                                        font-weight: bold;
+                                        border-radius: 6px;
+                                        cursor: pointer;
+                                        text-decoration: none;
+                                        font-size: 13px;
+                                        transition: opacity 0.2s;
+                                    }
+                                    .btn:hover { opacity: 0.9; }
+                                    .container {
+                                        flex: 1;
+                                        display: flex;
+                                        flex-direction: column;
+                                        position: relative;
+                                        height: 100%;
+                                    }
+                                    iframe {
+                                        width: 100%;
+                                        height: 100%;
+                                        border: none;
+                                        background: #1e293b;
+                                    }
+                                    .mobile-note {
+                                        background: #111827;
+                                        color: #fbbf24;
+                                        font-size: 12px;
+                                        text-align: center;
+                                        padding: 8px;
+                                        border-top: 1px solid #374151;
+                                    }
+                                </style>
+                            </head>
+                            <body>
+                                <header>
+                                    <h1>임상수련 이수증명서 (수기 검증)</h1>
+                                    <a href="${blobURL}" download="임상수련_이수증_${userName}.pdf" class="btn">직접 파일 저장</a>
+                                </header>
+                                <div class="container">
+                                    <iframe src="${blobURL}"></iframe>
+                                </div>
+                                <div class="mobile-note">
+                                    💡 <b>모바일 다운로드 안내:</b> 화면에 수료증이 보이지 않거나 저장이 안 될 경우, 상단의 [직접 파일 저장] 버튼을 누르거나 브라우저 메뉴의 '페이지 저장/인쇄'를 이용해주세요.
+                                </div>
+                            </body>
+                            </html>
+                        `);
+                        previewWindow.document.close();
+                        logPdfProgress("다운로드 완료");
+                    } else {
+                        logPdfProgress("다운로드 시작");
+                        try {
+                            const link = document.createElement("a");
+                            link.href = blobURL;
+                            link.download = `임상수련_이수증_${userName}.pdf`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            logPdfProgress("다운로드 완료");
+                        } catch (saveError) {
+                            console.warn("Direct programmatic save failed, falling back to window.open", saveError);
+                            window.open(blobURL, '_blank');
+                            logPdfProgress("폴백 창 열기 처리 완료");
+                        }
+                    }
+                } catch (err) {
+                    console.error("[PDF ENGINE] Fatal Error during assembly:", err);
+                    logPdfProgress(`PDF 생성 오류 발생: ${err.message}`, "error");
+                    
+                    if (previewWindow) {
+                        previewWindow.document.open();
+                        previewWindow.document.write(`
+                            <!DOCTYPE html>
+                            <html lang="ko">
+                            <head>
+                                <meta charset="UTF-8">
+                                <title>PDF 생성 실패</title>
+                                <style>
+                                    body {
+                                        background: #0f172a;
+                                        color: #f87171;
+                                        font-family: sans-serif;
+                                        display: flex;
+                                        flex-direction: column;
+                                        justify-content: center;
+                                        align-items: center;
+                                        height: 100vh;
+                                        margin: 0;
+                                        text-align: center;
+                                        padding: 20px;
+                                    }
+                                    h2 { color: #ef4444; margin-bottom: 12px; }
+                                    p { color: #94a3b8; font-size: 14px; margin-top: 0; }
+                                    .btn {
+                                        background: #1e293b;
+                                        color: #cbd5e1;
+                                        border: 1px solid #334155;
+                                        padding: 10px 20px;
+                                        border-radius: 8px;
+                                        cursor: pointer;
+                                        text-decoration: none;
+                                        margin-top: 20px;
+                                        font-weight: bold;
+                                    }
+                                </style>
+                            </head>
+                            <body>
+                                <h2>PDF 생성에 실패했습니다.</h2>
+                                <p>임상 데이터를 PDF 형식으로 렌더링하는 중 예외가 발생했습니다.</p>
+                                <p style="font-size: 12px; color: #64748b;">에러 내용: ${err.message}</p>
+                                <button class="btn" onclick="window.close()">창 닫기</button>
+                            </body>
+                            </html>
+                        `);
+                        previewWindow.document.close();
+                    }
+                }
+            }, 100);
+        }
+
+        function shareKakaoStyle() {
+            const certCode = document.getElementById("certHashCode").innerText;
+            showToastAlert("🔗 이수 완료 인증 정보가 클립보드에 복사되었습니다! 카카오톡 대화방에 붙여넣으십시오.");
+            
+            const dummy = document.createElement("input");
+            document.body.appendChild(dummy);
+            dummy.value = `[SOAP Catcher 2.0] ${currentUser.name} (별명: ${currentUser.id}) 님이 Clinical SOAP 라이센스 교육과정을 수료하셨습니다.\n수료 검증코드: ${certCode}\n최고점수: ${currentUser.highScore}점 / 누적응시: ${currentUser.attempts}회`;
+            dummy.select();
+            document.execCommand('copy');
+            document.body.removeChild(dummy);
+        }
+
+        window.addEventListener('keydown', function(e) {
+            const keyLower = e.key.toLowerCase();
+            
+            const reviewScreen = document.getElementById("reviewScreen");
+            if (!reviewScreen.classList.contains("hidden")) {
+                const expArea = document.getElementById("reviewExplanationArea");
+                if (expArea.classList.contains("hidden")) {
+                    if (keyLower === 's' || e.key === '1') { submitReviewAnswer('S'); return; }
+                    if (keyLower === 'o' || e.key === '2') { submitReviewAnswer('O'); return; }
+                    if (keyLower === 'a' || e.key === '3') { submitReviewAnswer('A'); return; }
+                    if (keyLower === 'p' || e.key === '4') { submitReviewAnswer('P'); return; }
+                }
+            }
+
+            const examScreen = document.getElementById("examScreen");
+            if (!examScreen.classList.contains("hidden")) {
+                const feedbackArea = document.getElementById("examFeedbackArea");
+                if (feedbackArea.classList.contains("hidden")) {
+                    if (keyLower === 's' || e.key === '1') { submitExamAnswer('S'); return; }
+                    if (keyLower === 'o' || e.key === '2') { submitExamAnswer('O'); return; }
+                    if (keyLower === 'a' || e.key === '3') { submitExamAnswer('A'); return; }
+                    if (keyLower === 'p' || e.key === '4') { submitExamAnswer('P'); return; }
+                }
+            }
+
+            if (e.key === 'Enter') {
+                console.log("[INPUT CONTROLLER] Enter key triggered.");
+
+                const fallbackModal = document.getElementById("imageFallbackModal");
+                if (!fallbackModal.classList.contains("hidden")) {
+                    e.preventDefault();
+                    closeImageFallbackModal();
+                    return;
+                }
+
+                const authAlert = document.getElementById("authAlertModal");
+                if (!authAlert.classList.contains("hidden")) {
+                    e.preventDefault();
+                    dismissAuthAlertModal();
+                    return;
+                }
+
+                const authScreen = document.getElementById("authScreen");
+                if (!authScreen.classList.contains("hidden")) {
+                    e.preventDefault();
+                    submitAuthForm();
+                    return;
+                }
+
+                const welcomeScreen = document.getElementById("welcomeScreen");
+                if (!welcomeScreen.classList.contains("hidden")) {
+                    e.preventDefault();
+                    startGameSession();
+                    return;
+                }
+                
+                const transScreen = document.getElementById("stageTransitionScreen");
+                if (!transScreen.classList.contains("hidden")) {
+                    e.preventDefault();
+                    proceedAfterTransition();
+                    return;
+                }
+
+                const wrongsModal = document.getElementById("consecutiveWrongsModal");
+                if (!wrongsModal.classList.contains("hidden")) {
+                    e.preventDefault();
+                    dismissConsecutiveWrongsModal();
+                    return;
+                }
+
+                const pauseScreen = document.getElementById("pauseScreen");
+                if (!pauseScreen.classList.contains("hidden")) {
+                    e.preventDefault();
+                    togglePauseGame();
+                    return;
+                }
+
+                if (!reviewScreen.classList.contains("hidden")) {
+                    const expArea = document.getElementById("reviewExplanationArea");
+                    if (!expArea.classList.contains("hidden")) {
+                        e.preventDefault();
+                        expArea.classList.add("hidden");
+                        return;
+                    }
+                }
+
+                if (!examScreen.classList.contains("hidden")) {
+                    const feedbackArea = document.getElementById("examFeedbackArea");
+                    if (!feedbackArea.classList.contains("hidden")) {
+                        e.preventDefault();
+                        proceedToNextExamQuestion();
+                        return;
+                    }
+                }
+
+                const resultScreen = document.getElementById("resultScreen");
+                if (!resultScreen.classList.contains("hidden")) {
+                    e.preventDefault();
+                    returnToLobby();
+                    return;
+                }
+            }
+        });
+
+        window.onload = function () {
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            window.addEventListener('resize', handleResize);
+
+            const touchL = document.getElementById("touchLeftBtn");
+            const touchR = document.getElementById("touchRightBtn");
+            if (touchL && touchR) {
+                touchL.addEventListener('touchstart', onTouchLeftStart, { passive: false });
+                touchL.addEventListener('touchend', onTouchLeftEnd, { passive: false });
+                touchL.addEventListener('touchcancel', onTouchLeftEnd, { passive: false });
+
+                touchR.addEventListener('touchstart', onTouchRightStart, { passive: false });
+                touchR.addEventListener('touchend', onTouchRightEnd, { passive: false });
+                touchR.addEventListener('touchcancel', onTouchRightEnd, { passive: false });
+            }
+
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                const fallbackBtn = document.getElementById("mobilePdfFallbackBtn");
+                if (fallbackBtn) fallbackBtn.classList.remove("hidden");
+            }
+        }
+    </script>
+</body>
+</html>
